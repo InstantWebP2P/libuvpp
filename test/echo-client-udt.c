@@ -215,7 +215,7 @@ int main(int argc, char * argv [])
 		pinger_new(atoi(argv[1]));
 		pinger_new(atoi(argv[1])+1);
 	} else {
-		pinger_new(atoi(TEST_PORT));
+		pinger_new(TEST_PORT);
 	}
 	uv_run(loop);
 
