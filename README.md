@@ -5,14 +5,12 @@ All api is similar to tcp. it's simple to use it:
 
 To build it manually, clone the repository and checkout v0.8-udt branch firstly, then do steps as below.
 
-third-party source:
-UDT4 - http://udt.sourceforge.net/
+Third-party source:
+[UDT4](http://udt.sourceforge.net)
 
-discussion group:
-https://groups.google.com/d/forum/iwebpp
+[Discussion group](https://groups.google.com/d/forum/iwebpp)
 
-Wiki page:
-https://github.com/InstantWebP2P/libuvpp/wiki/An-introduction-to-libuvpp
+[Wiki Page](https://github.com/InstantWebP2P/libuvpp/wiki/An-introduction-to-libuvpp)
 
 
 # libuv [![Build Status](https://secure.travis-ci.org/joyent/libuv.png)](http://travis-ci.org/joyent/libuv)
