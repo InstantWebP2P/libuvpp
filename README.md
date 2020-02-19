@@ -1,3 +1,7 @@
+# libuvpp 
+![C/C++ CI](https://github.com/InstantWebP2P/libuvpp/workflows/C/C++%20CI/badge.svg)
+
+
 Porting UDT(UDP-based transport) to libuv as the transport of HTTPP(run http over udp).	
 All api is similar to tcp. it's simple to use it: 	
 	1. replace tcp litera with udt, like uv_tcp_t to uv_udt_t.	
@@ -11,15 +15,6 @@ Third-party source:
 [Discussion group](https://groups.google.com/d/forum/iwebpp)
 
 [Wiki Page](https://github.com/InstantWebP2P/libuvpp/wiki/An-introduction-to-libuvpp)
-
-
-# libuv [![Build Status](https://secure.travis-ci.org/joyent/libuv.png)](http://travis-ci.org/joyent/libuv)
-
-libuv is a new platform layer for Node. Its purpose is to abstract IOCP on
-Windows and libev on Unix systems. We intend to eventually contain all
-platform differences in this library.
-
-http://nodejs.org/
 
 ## Features
 
