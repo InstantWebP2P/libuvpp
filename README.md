@@ -3,9 +3,11 @@
 
 
 Porting UDT(UDP-based transport) to libuv as the transport of HTTPP(run http over udp).	
-All api is similar to tcp. it's simple to use it: 	
+All api is similar to tcp. it's simple to use it:
+```
 	1. replace tcp litera with udt, like uv_tcp_t to uv_udt_t.	
 	2. do the rest as tcp.
+```
 
 To build it manually, clone the repository and checkout v0.8-udt branch firstly, then do steps as below.
 
