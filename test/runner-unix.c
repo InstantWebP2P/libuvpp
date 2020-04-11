@@ -41,9 +41,14 @@
 
 /* Do platform-specific initialization. */
 void platform_init(int argc, char **argv) {
+<<<<<<< HEAD
   const char* tap;
 
   tap = getenv("UV_TAP_OUTPUT");
+=======
+  const char* tap = getenv("UV_TAP_OUTPUT");
+
+>>>>>>> origin/v0.8-udt
   tap_output = (tap != NULL && atoi(tap) > 0);
 
   /* Disable stdio output buffering. */

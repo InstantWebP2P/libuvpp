@@ -30,7 +30,6 @@ char executable_path[PATHMAX] = { '\0' };
 
 int tap_output = 0;
 
-
 static void log_progress(int total,
                          int passed,
                          int failed,

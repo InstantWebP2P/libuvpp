@@ -68,6 +68,9 @@
 #define UV_HANDLE_TCP_SOCKET_CLOSED             0x20000000
 #define UV_HANDLE_SHARED_TCP_SOCKET             0x40000000
 
+/* Only used by uv_udt_t handles. */
+#define UV_HANDLE_UDT_RENDEZ                    0x80000000
+
 /* Only used by uv_pipe_t handles. */
 #define UV_HANDLE_NON_OVERLAPPED_PIPE           0x01000000
 #define UV_HANDLE_PIPESERVER                    0x02000000
@@ -117,6 +120,36 @@ int uv_tcp_import(uv_tcp_t* tcp, WSAPROTOCOL_INFOW* socket_protocol_info,
     int tcp_connection);
 
 int uv_tcp_duplicate_socket(uv_tcp_t* handle, int pid,
+    LPWSAPROTOCOL_INFOW protocol_info);
+
+
+/*
+ * UDT
+ */
+int uv_udt_listen(uv_udt_t* handle, int backlog, uv_connection_cb cb);
+int uv_udt_accept(uv_udt_t* server, uv_udt_t* client);
+int uv_udt_read_start(uv_udt_t* handle, uv_alloc_cb alloc_cb,
+    uv_read_cb read_cb);
+int uv_udt_write(uv_loop_t* loop, uv_write_t* req, uv_udt_t* handle,
+    uv_buf_t bufs[], int bufcnt, uv_write_cb cb);
+
+void uv_process_udt_poll_req(uv_loop_t* loop, uv_udt_t* handle, uv_req_t* req);
+/*
+void uv_process_udt_read_req(uv_loop_t* loop, uv_udt_t* handle, uv_req_t* req);
+void uv_process_udt_write_req(uv_loop_t* loop, uv_udt_t* handle,
+    uv_write_t* req);
+void uv_process_udt_accept_req(uv_loop_t* loop, uv_udt_t* handle,
+    uv_req_t* req);
+void uv_process_udt_connect_req(uv_loop_t* loop, uv_udt_t* handle,
+    uv_connect_t* req);
+*/
+void uv_udt_close(uv_loop_t* loop, uv_udt_t* udt);
+void uv_udt_endgame(uv_loop_t* loop, uv_udt_t* handle);
+
+int uv_udt_import(uv_udt_t* udt, WSAPROTOCOL_INFOW* socket_protocol_info,
+    int udt_connection);
+
+int uv_udt_duplicate_socket(uv_udt_t* handle, int pid,
     LPWSAPROTOCOL_INFOW protocol_info);
 
 

@@ -19,7 +19,8 @@
         'conditions': [
           ['OS=="solaris"', {
             'cflags': [ '-pthreads' ],
-          }, {
+          }],
+          ['OS not in "solaris android"', {
             'cflags': [ '-pthread' ],
           }],
         ],
@@ -29,12 +30,20 @@
 
   'targets': [
     {
+<<<<<<< HEAD
       'target_name': 'libuv',
       'type': '<(library)',
+=======
+      'target_name': 'uv',
+      'type': 'static_library', 
+      'standalone_static_library': 1, 
+>>>>>>> origin/v0.8-udt
       'include_dirs': [
         'include',
         'include/uv-private',
         'src/',
+        'src/UDT4/src/',
+        'src/nacl/',
       ],
       'direct_dependent_settings': {
         'include_dirs': [ 'include' ],
@@ -61,17 +70,107 @@
         'include/uv.h',
         'include/uv-private/ngx-queue.h',
         'include/uv-private/tree.h',
+<<<<<<< HEAD
+=======
+        'src/UDT4/src/udtc.h',
+        'src/nacl/tweetnacl.h',
+        'src/cares.c',
+>>>>>>> origin/v0.8-udt
         'src/fs-poll.c',
         'src/inet.c',
         'src/uv-common.c',
         'src/uv-common.h',
+<<<<<<< HEAD
         'src/version.c'
+=======
+        'src/ares/ares_cancel.c',
+        'src/ares/ares__close_sockets.c',
+        'src/ares/ares_data.c',
+        'src/ares/ares_data.h',
+        'src/ares/ares_destroy.c',
+        'src/ares/ares_dns.h',
+        'src/ares/ares_expand_name.c',
+        'src/ares/ares_expand_string.c',
+        'src/ares/ares_fds.c',
+        'src/ares/ares_free_hostent.c',
+        'src/ares/ares_free_string.c',
+        'src/ares/ares_getenv.h',
+        'src/ares/ares_gethostbyaddr.c',
+        'src/ares/ares_gethostbyname.c',
+        'src/ares/ares__get_hostent.c',
+        'src/ares/ares_getnameinfo.c',
+        'src/ares/ares_getopt.c',
+        'src/ares/ares_getopt.h',
+        'src/ares/ares_getsock.c',
+        'src/ares/ares_init.c',
+        'src/ares/ares_ipv6.h',
+        'src/ares/ares_library_init.c',
+        'src/ares/ares_library_init.h',
+        'src/ares/ares_llist.c',
+        'src/ares/ares_llist.h',
+        'src/ares/ares_mkquery.c',
+        'src/ares/ares_nowarn.c',
+        'src/ares/ares_nowarn.h',
+        'src/ares/ares_options.c',
+        'src/ares/ares_parse_aaaa_reply.c',
+        'src/ares/ares_parse_a_reply.c',
+        'src/ares/ares_parse_mx_reply.c',
+        'src/ares/ares_parse_ns_reply.c',
+        'src/ares/ares_parse_ptr_reply.c',
+        'src/ares/ares_parse_srv_reply.c',
+        'src/ares/ares_parse_txt_reply.c',
+        'src/ares/ares_platform.h',
+        'src/ares/ares_private.h',
+        'src/ares/ares_process.c',
+        'src/ares/ares_query.c',
+        'src/ares/ares__read_line.c',
+        'src/ares/ares_rules.h',
+        'src/ares/ares_search.c',
+        'src/ares/ares_send.c',
+        'src/ares/ares_setup.h',
+        'src/ares/ares_strcasecmp.c',
+        'src/ares/ares_strcasecmp.h',
+        'src/ares/ares_strdup.c',
+        'src/ares/ares_strdup.h',
+        'src/ares/ares_strerror.c',
+        'src/ares/ares_timeout.c',
+        'src/ares/ares__timeval.c',
+        'src/ares/ares_version.c',
+        'src/ares/ares_writev.c',
+        'src/ares/ares_writev.h',
+        'src/ares/bitncmp.c',
+        'src/ares/bitncmp.h',
+        'src/ares/inet_net_pton.c',
+        'src/ares/inet_net_pton.h',
+        'src/ares/inet_ntop.c',
+        'src/ares/inet_ntop.h',
+        'src/ares/nameser.h',
+        'src/ares/setup_once.h',
+        'src/ares/windows_port.c',
+        'src/UDT4/src/api.cpp',
+        'src/UDT4/src/buffer.cpp',
+        'src/UDT4/src/cache.cpp',
+        'src/UDT4/src/ccc.cpp',
+        'src/UDT4/src/channel.cpp',
+        'src/UDT4/src/common.cpp',
+        'src/UDT4/src/udt_core.cpp',
+        'src/UDT4/src/epoll.cpp',
+        'src/UDT4/src/list.cpp',
+        'src/UDT4/src/md5.cpp',
+        'src/UDT4/src/packet.cpp',
+        'src/UDT4/src/queue.cpp',
+        'src/UDT4/src/udtc.cpp',
+        'src/UDT4/src/window.cpp',
+        'src/nacl/tweetnacl.c',
+>>>>>>> origin/v0.8-udt
       ],
       'conditions': [
         [ 'OS=="win"', {
           'defines': [
             '_WIN32_WINNT=0x0600',
             '_GNU_SOURCE',
+            'EVPIPE_OSFD',
+            'UDT_EXPORTS'
           ],
           'sources': [
             'include/uv-private/uv-win.h',
@@ -102,6 +201,7 @@
             'src/win/threadpool.c',
             'src/win/timer.c',
             'src/win/udp.c',
+            'src/win/udt.c',
             'src/win/util.c',
             'src/win/winapi.c',
             'src/win/winapi.h',
@@ -120,11 +220,21 @@
         }, { # Not Windows i.e. POSIX
           'cflags': [
             '-g',
-            '--std=gnu89',
+            '--std=gnu99',
             '-pedantic',
             '-Wall',
             '-Wextra',
+<<<<<<< HEAD
             '-Wno-unused-parameter',
+=======
+            '-Wno-unused-parameter'
+            '-finline-functions',
+            '-fno-strict-aliasing',
+            '-fvisibility=hidden',
+            '-DEVPIPE_OSFD',
+            '-frtti',
+            '-fexceptions',
+>>>>>>> origin/v0.8-udt
           ],
           'sources': [
             'include/uv-private/uv-unix.h',
@@ -153,13 +263,23 @@
             'src/unix/timer.c',
             'src/unix/tty.c',
             'src/unix/udp.c',
+<<<<<<< HEAD
+=======
+            'src/unix/uv-eio.c',
+            'src/unix/uv-eio.h',
+            'src/unix/udt.c',
+>>>>>>> origin/v0.8-udt
           ],
           'link_settings': {
-            'libraries': [ '-lm' ],
+            'libraries': [ 
+              '-lm', 
+              '-lstdc++', 
+            ],
             'conditions': [
               ['OS=="solaris"', {
                 'ldflags': [ '-pthreads' ],
-              }, {
+              }],
+              ['OS != "solaris" and OS != "android"', {
                 'ldflags': [ '-pthread' ],
               }],
             ],
@@ -195,7 +315,14 @@
           },
           'defines': [
             '_DARWIN_USE_64_BIT_INODE=1',
+<<<<<<< HEAD
             '_DARWIN_UNLIMITED_SELECT=1',
+=======
+            'EV_CONFIG_H="config_darwin.h"',
+            'EIO_CONFIG_H="config_darwin.h"',
+            'EVPIPE_OSFD=1',
+            'OSX=1',
+>>>>>>> origin/v0.8-udt
           ]
         }],
         [ 'OS!="mac"', {
@@ -205,15 +332,47 @@
         }],
         [ 'OS=="linux"', {
           'sources': [
+<<<<<<< HEAD
             'src/unix/linux-core.c',
             'src/unix/linux-inotify.c',
             'src/unix/linux-syscalls.c',
             'src/unix/linux-syscalls.h',
+=======
+            'src/unix/linux/linux-core.c',
+            'src/unix/linux/inotify.c',
+            'src/unix/linux/syscalls.c',
+            'src/unix/linux/syscalls.h',
+          ],
+          'defines': [
+            'EV_CONFIG_H="config_linux.h"',
+            'EIO_CONFIG_H="config_linux.h"',
+            'LINUX=1'
+>>>>>>> origin/v0.8-udt
           ],
           'link_settings': {
             'libraries': [ '-ldl', '-lrt' ],
           },
         }],
+        [ 'OS=="android"', {
+          'include_dirs': [ 'src/ares/config_android' ],
+          'sources': [
+            'src/unix/linux/linux-core.c',
+            'src/unix/linux/inotify.c',
+            'src/unix/linux/syscalls.c',
+            'src/unix/linux/syscalls.h',
+            'src/unix/android/pthread-fixes.c',
+            'src/unix/android/android-ifaddrs.c',
+          ],
+          'defines': [
+            'EV_CONFIG_H="config_android.h"',
+            'EIO_CONFIG_H="config_android.h"',
+            'LINUX=1',
+            'ANDROID',
+          ],
+          'link_settings': {
+            'libraries': [ '-ldl' ],
+          },
+        }],        
         [ 'OS=="solaris"', {
           'sources': [ 'src/unix/sunos.c' ],
           'defines': [
@@ -402,6 +561,64 @@
             '_XOPEN_SOURCE=500',
           ],
         }],
+      ],
+      'msvs-settings': {
+        'VCLinkerTool': {
+          'SubSystem': 1, # /subsystem:console
+        },
+      },
+    },
+
+    {
+      'target_name': 'echo-server-udt',
+      'type': 'executable',
+      'dependencies': [ 'uv' ],
+      'sources': [
+        'test/echo-server-udt.c',
+        'test/runner.h',
+        'test/task.h',
+	  ],
+      'conditions': [
+        [ 'OS=="win"', {
+          'sources': [
+            'test/runner-win.h',
+          ],
+          'libraries': [ 'ws2_32.lib', 'wsock32.lib' ]
+        }, { # POSIX
+          'defines': [ '_GNU_SOURCE' ],
+          'sources': [
+            'test/runner-unix.h',
+          ]
+        }]
+      ],
+      'msvs-settings': {
+        'VCLinkerTool': {
+          'SubSystem': 1, # /subsystem:console
+        },
+      },
+	},
+
+	{
+      'target_name': 'echo-client-udt',
+      'type': 'executable',
+      'dependencies': [ 'uv' ],
+      'sources': [
+        'test/echo-client-udt.c',
+        'test/runner.h',
+        'test/task.h',
+	  ],
+      'conditions': [
+        [ 'OS=="win"', {
+          'sources': [
+            'test/runner-win.h',
+          ],
+          'libraries': [ 'ws2_32.lib', 'wsock32.lib' ]
+        }, { # POSIX
+          'defines': [ '_GNU_SOURCE' ],
+          'sources': [
+            'test/runner-unix.h',
+          ]
+        }]
       ],
       'msvs-settings': {
         'VCLinkerTool': {

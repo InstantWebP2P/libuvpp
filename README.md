@@ -1,10 +1,30 @@
+<<<<<<< HEAD
 # libuv
 
 libuv is a new platform layer for Node. Its purpose is to abstract IOCP on
 Windows and epoll/kqueue/event ports/etc. on Unix systems. We intend to
 eventually contain all platform differences in this library.
+=======
+# libuvpp 
+![C/C++ CI](https://github.com/InstantWebP2P/libuvpp/workflows/C/C++%20CI/badge.svg)
 
-http://nodejs.org/
+>>>>>>> origin/v0.8-udt
+
+Porting UDT(UDP-based transport) to libuv as the transport of HTTPP(run http over udp).	
+All api is similar to tcp. it's simple to use it:
+```
+	1. replace tcp litera with udt, like uv_tcp_t to uv_udt_t.	
+	2. do the rest as tcp.
+```
+
+To build it manually, clone the repository and checkout v0.8-udt branch firstly, then do steps as below.
+
+Third-party source:
+[UDT4](http://udt.sourceforge.net)
+
+[Discussion group](https://groups.google.com/d/forum/iwebpp)
+
+[Wiki Page](https://github.com/InstantWebP2P/libuvpp/wiki/An-introduction-to-libuvpp)
 
 **This branch only receives security fixes and will be EOL'd by the end of 2016,
 please switch to version v1.x**
@@ -16,6 +36,8 @@ please switch to version v1.x**
  * Non-blocking named pipes
 
  * UDP
+ 
+ * UDT transport sockets
 
  * Timers
 
@@ -61,6 +83,12 @@ makefiles or via GYP. GYP is a meta-build system which can generate MSVS,
 Makefile, and XCode backends. It is best used for integration into other
 projects.  The old system is using plain GNU Makefiles.
 
+To checkout the sourcecode:
+
+    git clone https://github.com/InstantWebP2P/libuvpp.git
+    git checkout v0.8-udt
+
+
 To build via Makefile simply execute:
 
     make
@@ -88,7 +116,11 @@ project tree manually:
 
 Unix users run
 
+<<<<<<< HEAD
     ./gyp_uv.py -f make
+=======
+    ./gyp_uv -f make
+>>>>>>> origin/v0.8-udt
     make -C out
 
 Macintosh users run
@@ -96,12 +128,20 @@ Macintosh users run
     ./gyp_uv.py -f xcode
     xcodebuild -project uv.xcodeproj -configuration Release -target All
 
+<<<<<<< HEAD
 Note for UNIX users: compile your project with `-D_LARGEFILE_SOURCE` and
 `-D_FILE_OFFSET_BITS=64`. GYP builds take care of that automatically.
 
 Note for Linux users: compile your project with `-D_GNU_SOURCE` when you
 include `uv.h`. GYP builds take care of that automatically. If you use
 autotools, add a `AC_GNU_SOURCE` declaration to your `configure.ac`.
+=======
+Android users run. notes: please MUST not build with BUILDTYPE=Release
+
+    $ source ./android-configure NDK_PATH gyp
+    $ make -C out or make uv -C out
+
+>>>>>>> origin/v0.8-udt
 
 ## Supported Platforms
 

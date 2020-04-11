@@ -30,6 +30,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+<<<<<<< HEAD:src/unix/linux-syscalls.h
 #if defined(__alpha__)
 # define UV__O_CLOEXEC        0x200000
 #elif defined(__hppa__)
@@ -51,6 +52,14 @@
 #else
 # define UV__O_NONBLOCK       0x800
 #endif
+=======
+#ifdef __ANDROID__
+#include <time.h>
+#endif
+
+#define UV__O_NONBLOCK        0x800
+#define UV__O_CLOEXEC         0x80000
+>>>>>>> origin/v0.8-udt:src/unix/linux/syscalls.h
 
 #define UV__EFD_CLOEXEC       UV__O_CLOEXEC
 #define UV__EFD_NONBLOCK      UV__O_NONBLOCK

@@ -41,10 +41,15 @@
         'conditions': [
           ['OS != "win"', {
             'defines': [ 'EV_VERIFY=2' ],
-          }],
+		  }],
+		  ['OS == "android"', {
+		    'cflags': [ '-fPIE' ],
+		    'ldflags': [ '-fPIE', '-pie' ],
+		  }],
         ]
       },
       'Release': {
+<<<<<<< HEAD
         'defines': [ 'NDEBUG' ],
         'cflags': [
           '-O3',
@@ -53,6 +58,11 @@
           '-fdata-sections',
           '-ffunction-sections',
         ],
+=======
+        ### comment NDEBUG to avoid UDT crash. TBD... rootcause
+        ###'defines': [ 'NDEBUG' ],
+        'cflags': [ '-O3', '-fomit-frame-pointer', '-fdata-sections', '-ffunction-sections' ],
+>>>>>>> origin/v0.8-udt
         'msvs_settings': {
           'VCCLCompilerTool': {
             'target_conditions': [
@@ -117,6 +127,8 @@
         'msvs_cygwin_shell': 0, # prevent actions from trying to use cygwin
         'defines': [
           'WIN32',
+          'EVPIPE_OSFD',
+          'UDT_EXPORTS',
           # we don't really want VC++ warning us about
           # how dangerous C functions are...
           '_CRT_SECURE_NO_DEPRECATE',
@@ -130,26 +142,34 @@
           }]
         ]
       }],
-      [ 'OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
+      [ 'OS=="android" or OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris"', {
         'cflags': [ '-Wall' ],
+<<<<<<< HEAD
         'cflags_cc': [ '-fno-rtti', '-fno-exceptions' ],
         'target_conditions': [
           ['_type=="static_library"', {
             'standalone_static_library': 1, # disable thin archive which needs binutils >= 2.19
           }],
         ],
+=======
+        'cflags_cc': [ '-frtti', '-fexceptions', '-DEVPIPE_OSFD' ],
+>>>>>>> origin/v0.8-udt
         'conditions': [
           [ 'host_arch != target_arch and target_arch=="ia32"', {
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],
           }],
           [ 'OS=="linux"', {
-            'cflags': [ '-ansi' ],
+            'cflags': [ '-ansi', '-DLINUX' ],
           }],
+          [ 'OS=="android"', {
+            'cflags': [ '-DLINUX' ],
+          }],          
           [ 'OS=="solaris"', {
             'cflags': [ '-pthreads' ],
             'ldflags': [ '-pthreads' ],
-          }, {
+          }],
+          [ 'OS not in "solaris android"', {
             'cflags': [ '-pthread' ],
             'ldflags': [ '-pthread' ],
           }],
@@ -164,8 +184,8 @@
           'GCC_CW_ASM_SYNTAX': 'NO',                # No -fasm-blocks
           'GCC_DYNAMIC_NO_PIC': 'NO',               # No -mdynamic-no-pic
                                                     # (Equivalent to -fPIC)
-          'GCC_ENABLE_CPP_EXCEPTIONS': 'NO',        # -fno-exceptions
-          'GCC_ENABLE_CPP_RTTI': 'NO',              # -fno-rtti
+          'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',       # -fno-exceptions
+          'GCC_ENABLE_CPP_RTTI': 'YES',             # -fno-rtti
           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
           # GCC_INLINES_ARE_PRIVATE_EXTERN maps to -fvisibility-inlines-hidden
           'GCC_INLINES_ARE_PRIVATE_EXTERN': 'YES',
@@ -174,7 +194,13 @@
           'PREBINDING': 'NO',                       # No -Wl,-prebind
           'USE_HEADERMAP': 'NO',
           'OTHER_CFLAGS': [
+<<<<<<< HEAD
             '-fstrict-aliasing',
+=======
+            '-fno-strict-aliasing',
+            '-DEVPIPE_OSFD',
+            '-DOSX',
+>>>>>>> origin/v0.8-udt
           ],
           'WARNING_CFLAGS': [
             '-Wall',

@@ -123,7 +123,11 @@ enum {
   UV_STREAM_BLOCKING  = 0x80,   /* Synchronous writes. */
   UV_TCP_NODELAY      = 0x100,  /* Disable Nagle. */
   UV_TCP_KEEPALIVE    = 0x200,  /* Turn on keep-alive. */
+<<<<<<< HEAD
   UV_TCP_SINGLE_ACCEPT = 0x400  /* Only accept() when idle. */
+=======
+  UV_UDT_RENDEZ       = 0x1000  /* Set UDT socket in rendezvous mode */
+>>>>>>> origin/v0.8-udt
 };
 
 /* loop flags */
@@ -178,6 +182,19 @@ int uv__accept(int sockfd);
 int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb);
 int uv__tcp_nodelay(int fd, int on);
 int uv__tcp_keepalive(int fd, int on, unsigned int delay);
+
+/* udt */
+int udt__accept(int sockfd);
+//int udt__connect(uv_connect_t* req, uv_udt_* stream, struct sockaddr* addr,
+//    socklen_t addrlen, uv_connect_cb cb);
+
+int uv_udt_listen(uv_udt_t* tcp, int backlog, uv_connection_cb cb);
+int uv__udt_nodelay(uv_udt_t* handle, int enable);
+int uv__udt_keepalive(uv_udt_t* handle, int enable, unsigned int delay);
+
+/* UDT socket operation */
+int udt__nonblock(int fd, int set) __attribute__((unused));
+int udt__socket(int domain, int type, int protocol);
 
 /* pipe */
 int uv_pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb);

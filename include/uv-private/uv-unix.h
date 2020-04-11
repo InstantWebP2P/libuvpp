@@ -39,6 +39,9 @@
 
 #include <semaphore.h>
 #include <pthread.h>
+#ifdef __ANDROID__
+#include "pthread-fixes.h"
+#endif
 #include <signal.h>
 
 #if defined(__linux__)
@@ -161,6 +164,35 @@ typedef struct {
   char* errmsg;
 } uv_lib_t;
 
+<<<<<<< HEAD
+=======
+struct uv__io_s;
+struct uv_loop_s;
+
+typedef struct uv__io_s uv__io_t;
+typedef void (*uv__io_cb)(struct uv_loop_s* loop, uv__io_t* handle, int events);
+
+struct uv__io_s {
+  ev_io io_watcher;
+  void * pri; // place handle pointer here by tom zhou
+};
+
+#define UV_REQ_TYPE_PRIVATE /* empty */
+
+#if __linux__
+# define UV_LOOP_PRIVATE_PLATFORM_FIELDS              \
+  uv__io_t inotify_read_watcher;                      \
+  void* inotify_watchers;                             \
+  int inotify_fd;
+#elif defined(PORT_SOURCE_FILE)
+# define UV_LOOP_PRIVATE_PLATFORM_FIELDS              \
+  ev_io fs_event_watcher;                             \
+  int fs_fd;
+#else
+# define UV_LOOP_PRIVATE_PLATFORM_FIELDS
+#endif
+
+>>>>>>> origin/v0.8-udt
 #define UV_LOOP_PRIVATE_FIELDS                                                \
   unsigned long flags;                                                        \
   int backend_fd;                                                             \
@@ -205,8 +237,54 @@ typedef struct {
   int error;                                                                  \
   uv_buf_t bufsml[4];                                                         \
 
+<<<<<<< HEAD
 #define UV_CONNECT_PRIVATE_FIELDS                                             \
   ngx_queue_t queue;                                                          \
+=======
+/* TODO: union or classes please! */
+#define UV_HANDLE_PRIVATE_FIELDS \
+  int flags; \
+  uv_handle_t* next_closing; \
+
+
+#define UV_STREAM_PRIVATE_FIELDS \
+  uv_connect_t *connect_req; \
+  uv_shutdown_t *shutdown_req; \
+  uv__io_t read_watcher; \
+  uv__io_t write_watcher; \
+  ngx_queue_t write_queue; \
+  ngx_queue_t write_completed_queue; \
+  uv_connection_cb connection_cb; \
+  int delayed_error; \
+  int accepted_fd; \
+  int fd; \
+
+
+/* UV_TCP */
+#define UV_TCP_PRIVATE_FIELDS
+
+
+/*
+ * uv_udt_t is a subclass of uv_stream_t
+ *
+ * Represents a UDT stream or UDT server.
+ */
+
+#define UV_UDT_PRIVATE_FIELDS \
+    int udtfd; \
+    int accepted_udtfd;
+
+
+/* UV_UDP */
+#define UV_UDP_PRIVATE_FIELDS         \
+  int fd;                             \
+  uv_alloc_cb alloc_cb;               \
+  uv_udp_recv_cb recv_cb;             \
+  uv__io_t read_watcher;              \
+  uv__io_t write_watcher;             \
+  ngx_queue_t write_queue;            \
+  ngx_queue_t write_completed_queue;  \
+>>>>>>> origin/v0.8-udt
 
 #define UV_SHUTDOWN_PRIVATE_FIELDS /* empty */
 

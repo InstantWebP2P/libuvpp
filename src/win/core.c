@@ -36,7 +36,7 @@
 /* The only event loop we support right now */
 static uv_loop_t uv_default_loop_;
 
-/* uv_once intialization guards */
+/* uv_once initialization guards */
 static uv_once_t uv_init_guard_ = UV_ONCE_INIT;
 static uv_once_t uv_default_loop_init_guard_ = UV_ONCE_INIT;
 
@@ -114,6 +114,7 @@ static void uv_loop_init(uv_loop_t* loop) {
 
   loop->active_tcp_streams = 0;
   loop->active_udp_streams = 0;
+  loop->active_udt_streams = 0;
 
   loop->timer_counter = 0;
   loop->stop_flag = 0;
@@ -243,9 +244,12 @@ static void uv_poll_ex(uv_loop_t* loop, int block) {
     for (i = 0; i < count; i++) {
       /* Package was dequeued */
       req = uv_overlapped_to_req(overlappeds[i].lpOverlapped);
+
       uv_insert_pending_req(loop, req);
+
     }
-  } else if (GetLastError() != WAIT_TIMEOUT) {
+  } else if ((GetLastError() != WAIT_TIMEOUT) &&
+		     (GetLastError() != ERROR_ABANDONED_WAIT_0)) {
     /* Serious error */
     uv_fatal_error(GetLastError(), "GetQueuedCompletionStatusEx");
   }
@@ -263,7 +267,8 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
   int r;
   void (*poll)(uv_loop_t* loop, int block);
 
-  if (pGetQueuedCompletionStatusEx)
+  // !!! using uv_poll to avoid UDT hung tom zhou<appnet.link@gmail.com>
+  if (0/*pGetQueuedCompletionStatusEx*/)
     poll = &uv_poll_ex;
   else
     poll = &uv_poll;
@@ -309,3 +314,4 @@ int uv_run(uv_loop_t *loop, uv_run_mode mode) {
 
   return r;
 }
+////////////////////////////////////////////////////////////////////////////////////

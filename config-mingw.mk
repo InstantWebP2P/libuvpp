@@ -35,8 +35,13 @@ RUNNER_LDFLAGS=$(LDFLAGS)
 RUNNER_LIBS=-lws2_32 -lpsapi -liphlpapi
 RUNNER_SRC=test/runner-win.c
 
+<<<<<<< HEAD
 libuv.a: $(WIN_OBJS) src/fs-poll.o src/inet.o src/uv-common.o src/version.o
 	$(AR) rcs $@ $^
+=======
+uv.a: $(WIN_OBJS) src/cares.o src/fs-poll.o src/uv-common.o $(CARES_OBJS) $(UDT_OBJS) $(NACL_OBJS) 
+	$(AR) rcs uv.a $^
+>>>>>>> origin/v0.8-udt
 
 src/%.o: src/%.c include/uv.h include/uv-private/uv-win.h
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -45,4 +50,18 @@ src/win/%.o: src/win/%.c include/uv.h include/uv-private/uv-win.h src/win/intern
 	$(CC) $(CFLAGS) -o $@ -c $<
 
 clean-platform:
+<<<<<<< HEAD
+=======
+	-rm -f src/ares/*.o
+	-rm -f src/UDT4/src/*.o
+	-rm -f src/nacl/*.o
+	-rm -f src/eio/*.o
+	-rm -f src/win/*.o
+
+distclean-platform:
+	-rm -f src/ares/*.o
+	-rm -f src/UDT4/src/*.o
+	-rm -f src/nacl/*.o
+	-rm -f src/eio/*.o
+>>>>>>> origin/v0.8-udt
 	-rm -f src/win/*.o

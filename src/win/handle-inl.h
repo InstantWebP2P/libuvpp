@@ -105,12 +105,16 @@ INLINE static void uv_process_endgames(uv_loop_t* loop) {
 
     switch (handle->type) {
       case UV_TCP:
-        uv_tcp_endgame(loop, (uv_tcp_t*) handle);
-        break;
+    	uv_tcp_endgame(loop, (uv_tcp_t*) handle);
+    	break;
+
+      case UV_UDT:
+    	uv_udt_endgame(loop, (uv_udt_t*) handle);
+    	break;
 
       case UV_NAMED_PIPE:
-        uv_pipe_endgame(loop, (uv_pipe_t*) handle);
-        break;
+    	uv_pipe_endgame(loop, (uv_pipe_t*) handle);
+    	break;
 
       case UV_TTY:
         uv_tty_endgame(loop, (uv_tty_t*) handle);

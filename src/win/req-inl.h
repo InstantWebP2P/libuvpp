@@ -215,6 +215,10 @@ INLINE static void uv_process_reqs(uv_loop_t* loop) {
         uv_process_fs_event_req(loop, req, (uv_fs_event_t*) req->data);
         break;
 
+      case UV_UDT_POLL:
+        uv_process_udt_poll_req(loop, (uv_udt_t*) req->data, req);
+        break;
+
       default:
         assert(0);
     }

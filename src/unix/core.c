@@ -92,6 +92,11 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
     break;
 
   case UV_TTY:
+<<<<<<< HEAD
+=======
+  case UV_TCP:
+  case UV_UDT:
+>>>>>>> origin/v0.8-udt
     uv__stream_close((uv_stream_t*)handle);
     break;
 
@@ -187,6 +192,7 @@ static void uv__finish_close(uv_handle_t* handle) {
 
     case UV_NAMED_PIPE:
     case UV_TCP:
+    case UV_UDT:
     case UV_TTY:
       uv__stream_destroy((uv_stream_t*)handle);
       break;

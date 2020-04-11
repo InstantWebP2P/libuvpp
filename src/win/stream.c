@@ -31,6 +31,8 @@ int uv_listen(uv_stream_t* stream, int backlog, uv_connection_cb cb) {
   switch (stream->type) {
     case UV_TCP:
       return uv_tcp_listen((uv_tcp_t*)stream, backlog, cb);
+    case UV_UDT:
+      return uv_udt_listen((uv_udt_t*)stream, backlog, cb);
     case UV_NAMED_PIPE:
       return uv_pipe_listen((uv_pipe_t*)stream, backlog, cb);
     default:
@@ -44,6 +46,8 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
   switch (server->type) {
     case UV_TCP:
       return uv_tcp_accept((uv_tcp_t*)server, (uv_tcp_t*)client);
+    case UV_UDT:
+      return uv_udt_accept((uv_udt_t*)server, (uv_udt_t*)client);
     case UV_NAMED_PIPE:
       return uv_pipe_accept((uv_pipe_t*)server, client);
     default:
@@ -68,6 +72,8 @@ int uv_read_start(uv_stream_t* handle, uv_alloc_cb alloc_cb,
   switch (handle->type) {
     case UV_TCP:
       return uv_tcp_read_start((uv_tcp_t*)handle, alloc_cb, read_cb);
+    case UV_UDT:
+      return uv_udt_read_start((uv_udt_t*)handle, alloc_cb, read_cb);
     case UV_NAMED_PIPE:
       return uv_pipe_read_start((uv_pipe_t*)handle, alloc_cb, read_cb);
     case UV_TTY:
@@ -127,6 +133,8 @@ int uv_write(uv_write_t* req, uv_stream_t* handle, uv_buf_t bufs[], int bufcnt,
   switch (handle->type) {
     case UV_TCP:
       return uv_tcp_write(loop, req, (uv_tcp_t*) handle, bufs, bufcnt, cb);
+    case UV_UDT:
+      return uv_udt_write(loop, req, (uv_udt_t*) handle, bufs, bufcnt, cb);
     case UV_NAMED_PIPE:
       return uv_pipe_write(loop, req, (uv_pipe_t*) handle, bufs, bufcnt, cb);
     case UV_TTY:

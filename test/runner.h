@@ -167,4 +167,7 @@ void rewind_cursor(void);
 /* trigger output as tap */
 extern int tap_output;
 
+/* trigger output as tap */
+extern int tap_output;
+
 #endif /* RUNNER_H_ */

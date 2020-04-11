@@ -218,7 +218,11 @@ out:
 
   /* Force callback to run on next tick in case of error. */
   if (err != 0)
+<<<<<<< HEAD
     uv__io_feed(handle->loop, &handle->io_watcher);
+=======
+    uv__io_feed(handle->loop, &handle->write_watcher, UV__IO_WRITE);
+>>>>>>> origin/v0.8-udt
 
   /* Mimic the Windows pipe implementation, always
    * return 0 and let the callback handle errors.

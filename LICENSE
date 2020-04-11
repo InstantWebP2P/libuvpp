@@ -1,9 +1,6 @@
-libuv is part of the Node project: http://nodejs.org/
-libuv may be distributed alone under Node's license:
+libuvpp's license follows:
 
-====
-
-Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+Copyright Joyent, Inc, yunhong gu, tom zhou(appnet.link) and other libuvpp contributors. All rights reserved.
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to
 deal in the Software without restriction, including without limitation the
@@ -22,9 +19,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 IN THE SOFTWARE.
 
-====
-
-This license applies to all parts of libuv that are not externally
+This license applies to all parts of libuvpp that are not externally
 maintained libraries.
 
 The externally maintained libraries used by libuv are:
@@ -39,3 +34,5 @@ The externally maintained libraries used by libuv are:
 
   - stdint-msvc2008.h (from msinttypes), copyright Alexander Chemeris. Three
     clause BSD license.
+
+  - UDT4, copyright yunhong gu, and under BSD license.
