@@ -246,20 +246,14 @@ typedef union {
 } uv_cond_t;
 
 typedef union {
+  /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
+  /* windows.h. */
+  SRWLOCK srwlock_;
   struct {
+    uv_mutex_t read_mutex_;
+    uv_mutex_t write_mutex_;
     unsigned int num_readers_;
-    CRITICAL_SECTION num_readers_lock_;
-    HANDLE write_semaphore_;
-  } state_;
-  /* TODO: remove me in v2.x. */
-  struct {
-    SRWLOCK unused_;
-  } unused1_;
-  /* TODO: remove me in v2.x. */
-  struct {
-    uv_mutex_t unused1_;
-    uv_mutex_t unused2_;
-  } unused2_;
+  } fallback_;
 } uv_rwlock_t;
 
 typedef struct {
@@ -495,8 +489,7 @@ typedef struct uv_ioargs_s {
   union {                                                                     \
     struct {                                                                  \
       /* Used for readable TTY handles */                                     \
-      /* TODO: remove me in v2.x. */                                          \
-      HANDLE unused_;                                                         \
+      HANDLE read_line_handle;                                                \
       uv_buf_t read_line_buffer;                                              \
       HANDLE read_raw_wait;                                                   \
       /* Fields used for translating win keystrokes into vt100 characters */  \
@@ -646,6 +639,11 @@ typedef struct uv_ioargs_s {
   RB_ENTRY(uv_signal_s) tree_entry;                                           \
   struct uv_req_s signal_req;                                                 \
   unsigned long pending_signum;
+
+int uv_utf16_to_utf8(const WCHAR* utf16Buffer, size_t utf16Size,
+    char* utf8Buffer, size_t utf8Size);
+int uv_utf8_to_utf16(const char* utf8Buffer, WCHAR* utf16Buffer,
+    size_t utf16Size);
 
 #ifndef F_OK
 #define F_OK 0

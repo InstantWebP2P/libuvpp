@@ -48,7 +48,6 @@ extern "C" {
 #include "uv-errno.h"
 #include "uv-version.h"
 #include <stddef.h>
-#include <stdio.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
 # include "stdint-msvc2008.h"
@@ -232,7 +231,6 @@ typedef struct uv_work_s uv_work_t;
 typedef struct uv_cpu_info_s uv_cpu_info_t;
 typedef struct uv_interface_address_s uv_interface_address_t;
 typedef struct uv_dirent_s uv_dirent_t;
-typedef struct uv_passwd_s uv_passwd_t;
 
 typedef enum {
   UV_LOOP_BLOCK_SIGNAL
@@ -427,10 +425,6 @@ UV_EXTERN size_t uv_req_size(uv_req_type type);
 UV_EXTERN int uv_is_active(const uv_handle_t* handle);
 
 UV_EXTERN void uv_walk(uv_loop_t* loop, uv_walk_cb walk_cb, void* arg);
-
-/* Helpers for ad hoc debugging, no API/ABI stability guaranteed. */
-UV_EXTERN void uv_print_all_handles(uv_loop_t* loop, FILE* stream);
-UV_EXTERN void uv_print_active_handles(uv_loop_t* loop, FILE* stream);
 
 UV_EXTERN void uv_close(uv_handle_t* handle, uv_close_cb close_cb);
 
@@ -736,8 +730,7 @@ struct uv_poll_s {
 
 enum uv_poll_event {
   UV_READABLE = 1,
-  UV_WRITABLE = 2,
-  UV_DISCONNECT = 4
+  UV_WRITABLE = 2
 };
 
 UV_EXTERN int uv_poll_init(uv_loop_t* loop, uv_poll_t* handle, int fd);
@@ -1023,14 +1016,6 @@ struct uv_interface_address_s {
   } netmask;
 };
 
-struct uv_passwd_s {
-  char* username;
-  long uid;
-  long gid;
-  char* shell;
-  char* homedir;
-};
-
 typedef enum {
   UV_DIRENT_UNKNOWN,
   UV_DIRENT_FILE,
@@ -1080,9 +1065,6 @@ typedef struct {
 UV_EXTERN int uv_getrusage(uv_rusage_t* rusage);
 
 UV_EXTERN int uv_os_homedir(char* buffer, size_t* size);
-UV_EXTERN int uv_os_tmpdir(char* buffer, size_t* size);
-UV_EXTERN int uv_os_get_passwd(uv_passwd_t* pwd);
-UV_EXTERN void uv_os_free_passwd(uv_passwd_t* pwd);
 
 UV_EXTERN int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count);
 UV_EXTERN void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count);
@@ -1122,8 +1104,7 @@ typedef enum {
   UV_FS_SYMLINK,
   UV_FS_READLINK,
   UV_FS_CHOWN,
-  UV_FS_FCHOWN,
-  UV_FS_REALPATH
+  UV_FS_FCHOWN
 } uv_fs_type;
 
 /* uv_fs_t is a subclass of uv_req_t. */
@@ -1275,10 +1256,6 @@ UV_EXTERN int uv_fs_readlink(uv_loop_t* loop,
                              uv_fs_t* req,
                              const char* path,
                              uv_fs_cb cb);
-UV_EXTERN int uv_fs_realpath(uv_loop_t* loop,
-                             uv_fs_t* req,
-                             const char* path,
-                             uv_fs_cb cb);
 UV_EXTERN int uv_fs_fchmod(uv_loop_t* loop,
                            uv_fs_t* req,
                            uv_file file,
@@ -1407,7 +1384,7 @@ UV_EXTERN int uv_chdir(const char* dir);
 UV_EXTERN uint64_t uv_get_free_memory(void);
 UV_EXTERN uint64_t uv_get_total_memory(void);
 
-UV_EXTERN uint64_t uv_hrtime(void);
+UV_EXTERN extern uint64_t uv_hrtime(void);
 
 UV_EXTERN void uv_disable_stdio_inheritance(void);
 

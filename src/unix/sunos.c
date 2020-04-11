@@ -116,17 +116,6 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 }
 
 
-int uv__io_check_fd(uv_loop_t* loop, int fd) {
-  if (port_associate(loop->backend_fd, PORT_SOURCE_FD, fd, POLLIN, 0))
-    return -errno;
-
-  if (port_dissociate(loop->backend_fd, PORT_SOURCE_FD, fd))
-    abort();
-
-  return 0;
-}
-
-
 void uv__io_poll(uv_loop_t* loop, int timeout) {
   struct port_event events[1024];
   struct port_event* pe;
@@ -140,7 +129,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   unsigned int nfds;
   unsigned int i;
   int saved_errno;
-  int have_signals;
   int nevents;
   int count;
   int err;
@@ -231,7 +219,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       return;
     }
 
-    have_signals = 0;
     nevents = 0;
 
     assert(loop->watchers != NULL);
@@ -254,14 +241,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       if (w == NULL)
         continue;
 
-      /* Run signal watchers last.  This also affects child process watchers
-       * because those are implemented in terms of signal watchers.
-       */
-      if (w == &loop->signal_io_watcher)
-        have_signals = 1;
-      else
-        w->cb(loop, w, pe->portev_events);
-
+      w->cb(loop, w, pe->portev_events);
       nevents++;
 
       if (w != loop->watchers[fd])
@@ -271,15 +251,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       if (w->pevents != 0 && QUEUE_EMPTY(&w->watcher_queue))
         QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
     }
-
-    if (have_signals != 0)
-      loop->signal_io_watcher.cb(loop, &loop->signal_io_watcher, POLLIN);
-
     loop->watchers[loop->nwatchers] = NULL;
     loop->watchers[loop->nwatchers + 1] = NULL;
-
-    if (have_signals != 0)
-      return;  /* Event loop should cycle now so don't poll again. */
 
     if (nevents != 0) {
       if (nfds == ARRAY_SIZE(events) && --count != 0) {
@@ -472,7 +445,7 @@ int uv_fs_event_start(uv_fs_event_t* handle,
 
   if (first_run) {
     uv__io_init(&handle->loop->fs_event_watcher, uv__fs_event_read, portfd);
-    uv__io_start(handle->loop, &handle->loop->fs_event_watcher, POLLIN);
+    uv__io_start(handle->loop, &handle->loop->fs_event_watcher, UV__POLLIN);
   }
 
   return 0;
@@ -720,10 +693,8 @@ int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
   }
 
   *addresses = uv__malloc(*count * sizeof(**addresses));
-  if (!(*addresses)) {
-    freeifaddrs(addrs);
+  if (!(*addresses))
     return -ENOMEM;
-  }
 
   address = *addresses;
 

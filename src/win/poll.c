@@ -91,11 +91,7 @@ static void uv__fast_poll_submit_poll_req(uv_loop_t* loop, uv_poll_t* handle) {
     handle->mask_events_1 = handle->events;
     handle->mask_events_2 = 0;
   } else {
-    /* Just wait until there's an unsubmitted req. */
-    /* This will happen almost immediately as one of the 2 outstanding */
-    /* requests is about to return. When this happens, */
-    /* uv__fast_poll_process_poll_req will be called, and the pending */
-    /* events, if needed, will be processed in a subsequent request. */
+    assert(0);
     return;
   }
 
@@ -111,10 +107,6 @@ static void uv__fast_poll_submit_poll_req(uv_loop_t* loop, uv_poll_t* handle) {
   if (handle->events & UV_READABLE) {
     afd_poll_info->Handles[0].Events |= AFD_POLL_RECEIVE |
         AFD_POLL_DISCONNECT | AFD_POLL_ACCEPT | AFD_POLL_ABORT;
-  } else {
-    if (handle->events & UV_DISCONNECT) {
-      afd_poll_info->Handles[0].Events |= AFD_POLL_DISCONNECT;
-    }
   }
   if (handle->events & UV_WRITABLE) {
     afd_poll_info->Handles[0].Events |= AFD_POLL_SEND | AFD_POLL_CONNECT_FAIL;
@@ -192,9 +184,6 @@ static void uv__fast_poll_process_poll_req(uv_loop_t* loop, uv_poll_t* handle,
     if ((afd_poll_info->Handles[0].Events & (AFD_POLL_RECEIVE |
         AFD_POLL_DISCONNECT | AFD_POLL_ACCEPT | AFD_POLL_ABORT)) != 0) {
       events |= UV_READABLE;
-      if ((afd_poll_info->Handles[0].Events & AFD_POLL_DISCONNECT) != 0) {
-        events |= UV_DISCONNECT;
-      }
     }
     if ((afd_poll_info->Handles[0].Events & (AFD_POLL_SEND |
         AFD_POLL_CONNECT_FAIL)) != 0) {
@@ -229,7 +218,7 @@ static void uv__fast_poll_process_poll_req(uv_loop_t* loop, uv_poll_t* handle,
 static int uv__fast_poll_set(uv_loop_t* loop, uv_poll_t* handle, int events) {
   assert(handle->type == UV_POLL);
   assert(!(handle->flags & UV__HANDLE_CLOSING));
-  assert((events & ~(UV_READABLE | UV_WRITABLE | UV_DISCONNECT)) == 0);
+  assert((events & ~(UV_READABLE | UV_WRITABLE)) == 0);
 
   handle->events = events;
 

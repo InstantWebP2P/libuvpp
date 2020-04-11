@@ -31,12 +31,7 @@ int uv_dlopen(const char* filename, uv_lib_t* lib) {
   lib->handle = NULL;
   lib->errmsg = NULL;
 
-  if (!MultiByteToWideChar(CP_UTF8,
-                           0,
-                           filename,
-                           -1,
-                           filename_w,
-                           ARRAY_SIZE(filename_w))) {
+  if (!uv_utf8_to_utf16(filename, filename_w, ARRAY_SIZE(filename_w))) {
     return uv__dlerror(lib, GetLastError());
   }
 

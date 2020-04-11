@@ -109,8 +109,10 @@ static void uv__getaddrinfo_done(struct uv__work* w, int status) {
   req = container_of(w, uv_getaddrinfo_t, work_req);
 
   /* release input parameter memory */
-  uv__free(req->alloc);
-  req->alloc = NULL;
+  if (req->alloc != NULL) {
+    uv__free(req->alloc);
+    req->alloc = NULL;
+  }
 
   if (status == UV_ECANCELED) {
     assert(req->retcode == 0);
@@ -126,14 +128,7 @@ static void uv__getaddrinfo_done(struct uv__work* w, int status) {
       addrinfo_len += addrinfo_struct_len +
           ALIGNED_SIZE(addrinfow_ptr->ai_addrlen);
       if (addrinfow_ptr->ai_canonname != NULL) {
-        name_len = WideCharToMultiByte(CP_UTF8,
-                                       0,
-                                       addrinfow_ptr->ai_canonname,
-                                       -1,
-                                       NULL,
-                                       0,
-                                       NULL,
-                                       NULL);
+        name_len = uv_utf16_to_utf8(addrinfow_ptr->ai_canonname, -1, NULL, 0);
         if (name_len == 0) {
           req->retcode = uv_translate_sys_error(GetLastError());
           goto complete;
@@ -177,24 +172,16 @@ static void uv__getaddrinfo_done(struct uv__work* w, int status) {
 
         /* convert canonical name to UTF-8 */
         if (addrinfow_ptr->ai_canonname != NULL) {
-          name_len = WideCharToMultiByte(CP_UTF8,
-                                         0,
-                                         addrinfow_ptr->ai_canonname,
-                                         -1,
-                                         NULL,
-                                         0,
-                                         NULL,
-                                         NULL);
+          name_len = uv_utf16_to_utf8(addrinfow_ptr->ai_canonname,
+                                      -1,
+                                      NULL,
+                                      0);
           assert(name_len > 0);
           assert(cur_ptr + name_len <= alloc_ptr + addrinfo_len);
-          name_len = WideCharToMultiByte(CP_UTF8,
-                                         0,
-                                         addrinfow_ptr->ai_canonname,
-                                         -1,
-                                         cur_ptr,
-                                         name_len,
-                                         NULL,
-                                         NULL);
+          name_len = uv_utf16_to_utf8(addrinfow_ptr->ai_canonname,
+                                      -1,
+                                      cur_ptr,
+                                      name_len);
           assert(name_len > 0);
           addrinfo_ptr->ai_canonname = cur_ptr;
           cur_ptr += ALIGNED_SIZE(name_len);
@@ -232,7 +219,9 @@ void uv_freeaddrinfo(struct addrinfo* ai) {
   char* alloc_ptr = (char*)ai;
 
   /* release copied result memory */
-  uv__free(alloc_ptr);
+  if (alloc_ptr != NULL) {
+    uv__free(alloc_ptr);
+  }
 }
 
 
@@ -276,8 +265,7 @@ int uv_getaddrinfo(uv_loop_t* loop,
 
   /* calculate required memory size for all input values */
   if (node != NULL) {
-    nodesize = ALIGNED_SIZE(MultiByteToWideChar(CP_UTF8, 0, node, -1, NULL, 0) *
-                            sizeof(WCHAR));
+    nodesize = ALIGNED_SIZE(uv_utf8_to_utf16(node, NULL, 0) * sizeof(WCHAR));
     if (nodesize == 0) {
       err = GetLastError();
       goto error;
@@ -285,12 +273,7 @@ int uv_getaddrinfo(uv_loop_t* loop,
   }
 
   if (service != NULL) {
-    servicesize = ALIGNED_SIZE(MultiByteToWideChar(CP_UTF8,
-                                                   0,
-                                                   service,
-                                                   -1,
-                                                   NULL,
-                                                   0) *
+    servicesize = ALIGNED_SIZE(uv_utf8_to_utf16(service, NULL, 0) *
                                sizeof(WCHAR));
     if (servicesize == 0) {
       err = GetLastError();
@@ -315,12 +298,9 @@ int uv_getaddrinfo(uv_loop_t* loop,
   /* the request. */
   if (node != NULL) {
     req->node = (WCHAR*)alloc_ptr;
-    if (MultiByteToWideChar(CP_UTF8,
-                            0,
-                            node,
-                            -1,
-                            (WCHAR*) alloc_ptr,
-                            nodesize / sizeof(WCHAR)) == 0) {
+    if (uv_utf8_to_utf16(node,
+                         (WCHAR*) alloc_ptr,
+                         nodesize / sizeof(WCHAR)) == 0) {
       err = GetLastError();
       goto error;
     }
@@ -333,12 +313,9 @@ int uv_getaddrinfo(uv_loop_t* loop,
   /* in the req. */
   if (service != NULL) {
     req->service = (WCHAR*)alloc_ptr;
-    if (MultiByteToWideChar(CP_UTF8,
-                            0,
-                            service,
-                            -1,
-                            (WCHAR*) alloc_ptr,
-                            servicesize / sizeof(WCHAR)) == 0) {
+    if (uv_utf8_to_utf16(service,
+                         (WCHAR*) alloc_ptr,
+                         servicesize / sizeof(WCHAR)) == 0) {
       err = GetLastError();
       goto error;
     }
@@ -377,9 +354,8 @@ int uv_getaddrinfo(uv_loop_t* loop,
   }
 
 error:
-  if (req != NULL) {
+  if (req != NULL && req->alloc != NULL) {
     uv__free(req->alloc);
-    req->alloc = NULL;
   }
   return uv_translate_sys_error(err);
 }

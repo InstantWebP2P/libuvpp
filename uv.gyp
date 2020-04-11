@@ -17,7 +17,6 @@
       }],
     ],
     'xcode_settings': {
-      'GCC_SYMBOLS_PRIVATE_EXTERN': 'YES',  # -fvisibility=hidden
       'WARNING_CFLAGS': [ '-Wall', '-Wextra', '-Wno-unused-parameter' ],
       'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
     }
@@ -94,7 +93,6 @@
             'src/win/req.c',
             'src/win/req-inl.h',
             'src/win/signal.c',
-            'src/win/snprintf.c',
             'src/win/stream.c',
             'src/win/stream-inl.h',
             'src/win/tcp.c',
@@ -113,14 +111,12 @@
               '-liphlpapi',
               '-lpsapi',
               '-lshell32',
-              '-luser32',
               '-luserenv',
               '-lws2_32'
             ],
           },
         }, { # Not Windows i.e. POSIX
           'cflags': [
-            '-fvisibility=hidden',
             '-g',
             '--std=gnu89',
             '-pedantic',
@@ -189,7 +185,6 @@
             'src/unix/darwin.c',
             'src/unix/fsevents.c',
             'src/unix/darwin-proctitle.c',
-            'src/unix/pthread-barrier.c'
           ],
           'defines': [
             '_DARWIN_USE_64_BIT_INODE=1',
@@ -220,8 +215,7 @@
             'src/unix/linux-syscalls.c',
             'src/unix/linux-syscalls.h',
             'src/unix/pthread-fixes.c',
-            'src/unix/android-ifaddrs.c',
-            'src/unix/pthread-barrier.c'
+            'src/unix/android-ifaddrs.c'
           ],
           'link_settings': {
             'libraries': [ '-ldl' ],
@@ -248,7 +242,6 @@
             '_ALL_SOURCE',
             '_XOPEN_SOURCE=500',
             '_LINUX_SOURCE_COMPAT',
-            '_THREAD_SAFE',
           ],
           'link_settings': {
             'libraries': [
@@ -303,7 +296,6 @@
         'test/test-default-loop-close.c',
         'test/test-device-tun-echo.c',
         'test/test-delayed-accept.c',
-        'test/test-eintr-handling.c',
         'test/test-error.c',
         'test/test-embed.c',
         'test/test-emfile.c',
@@ -312,7 +304,6 @@
         'test/test-fs-event.c',
         'test/test-get-currentexe.c',
         'test/test-get-memory.c',
-        'test/test-get-passwd.c',
         'test/test-getaddrinfo.c',
         'test/test-getnameinfo.c',
         'test/test-getsockname.c',
@@ -338,10 +329,8 @@
         'test/test-ping-pong.c',
         'test/test-pipe-bind-error.c',
         'test/test-pipe-connect-error.c',
-        'test/test-pipe-connect-multiple.c',
         'test/test-pipe-connect-prepare.c',
         'test/test-pipe-getsockname.c',
-        'test/test-pipe-pending-instances.c',
         'test/test-pipe-sendmsg.c',
         'test/test-pipe-server-close.c',
         'test/test-pipe-close-stdout-read-stdin.c',
@@ -352,7 +341,6 @@
         'test/test-poll-close-doesnt-corrupt-stack.c',
         'test/test-poll-closesocket.c',
         'test/test-process-title.c',
-        'test/test-queue-foreach-delete.c',
         'test/test-ref.c',
         'test/test-run-nowait.c',
         'test/test-run-once.c',
@@ -391,7 +379,6 @@
         'test/test-threadpool.c',
         'test/test-threadpool-cancel.c',
         'test/test-thread-equal.c',
-        'test/test-tmpdir.c',
         'test/test-mutexes.c',
         'test/test-thread.c',
         'test/test-barrier.c',
@@ -423,8 +410,7 @@
         [ 'OS=="win"', {
           'sources': [
             'test/runner-win.c',
-            'test/runner-win.h',
-            'src/win/snprintf.c',
+            'test/runner-win.h'
           ],
           'libraries': [ '-lws2_32' ]
         }, { # POSIX
@@ -433,11 +419,6 @@
             'test/runner-unix.c',
             'test/runner-unix.h',
           ],
-        }],
-        [ 'OS in "mac dragonflybsd freebsd linux netbsd openbsd".split()', {
-          'link_settings': {
-            'libraries': [ '-lutil' ],
-          },
         }],
         [ 'OS=="solaris"', { # make test-fs.c compile, needs _POSIX_C_SOURCE
           'defines': [
@@ -497,7 +478,6 @@
           'sources': [
             'test/runner-win.c',
             'test/runner-win.h',
-            'src/win/snprintf.c',
           ],
           'libraries': [ '-lws2_32' ]
         }, { # POSIX

@@ -61,7 +61,7 @@ void uv__udp_finish_close(uv_udp_t* handle) {
   uv_udp_send_t* req;
   QUEUE* q;
 
-  assert(!uv__io_active(&handle->io_watcher, POLLIN | POLLOUT));
+  assert(!uv__io_active(&handle->io_watcher, UV__POLLIN | UV__POLLOUT));
   assert(handle->io_watcher.fd == -1);
 
   while (!QUEUE_EMPTY(&handle->write_queue)) {
@@ -120,8 +120,8 @@ static void uv__udp_run_completed(uv_udp_t* handle) {
 
   if (QUEUE_EMPTY(&handle->write_queue)) {
     /* Pending queue and completion queue empty, stop watcher. */
-    uv__io_stop(handle->loop, &handle->io_watcher, POLLOUT);
-    if (!uv__io_active(&handle->io_watcher, POLLIN))
+    uv__io_stop(handle->loop, &handle->io_watcher, UV__POLLOUT);
+    if (!uv__io_active(&handle->io_watcher, UV__POLLIN))
       uv__handle_stop(handle);
   }
 
@@ -135,10 +135,10 @@ static void uv__udp_io(uv_loop_t* loop, uv__io_t* w, unsigned int revents) {
   handle = container_of(w, uv_udp_t, io_watcher);
   assert(handle->type == UV_UDP);
 
-  if (revents & POLLIN)
+  if (revents & UV__POLLIN)
     uv__udp_recvmsg(handle);
 
-  if (revents & POLLOUT) {
+  if (revents & UV__POLLOUT) {
     uv__udp_sendmsg(handle);
     uv__udp_run_completed(handle);
   }
@@ -410,10 +410,8 @@ int uv__udp_send(uv_udp_send_t* req,
   if (nbufs > ARRAY_SIZE(req->bufsml))
     req->bufs = uv__malloc(nbufs * sizeof(bufs[0]));
 
-  if (req->bufs == NULL) {
-    uv__req_unregister(handle->loop, req);
+  if (req->bufs == NULL)
     return -ENOMEM;
-  }
 
   memcpy(req->bufs, bufs, nbufs * sizeof(bufs[0]));
   handle->send_queue_size += uv__count_bufs(req->bufs, req->nbufs);
@@ -424,7 +422,7 @@ int uv__udp_send(uv_udp_send_t* req,
   if (empty_queue && !(handle->flags & UV_UDP_PROCESSING)) {
     uv__udp_sendmsg(handle);
   } else {
-    uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
+    uv__io_start(handle->loop, &handle->io_watcher, UV__POLLOUT);
   }
 
   return 0;
@@ -843,7 +841,7 @@ int uv__udp_recv_start(uv_udp_t* handle,
   if (alloc_cb == NULL || recv_cb == NULL)
     return -EINVAL;
 
-  if (uv__io_active(&handle->io_watcher, POLLIN))
+  if (uv__io_active(&handle->io_watcher, UV__POLLIN))
     return -EALREADY;  /* FIXME(bnoordhuis) Should be -EBUSY. */
 
   err = uv__udp_maybe_deferred_bind(handle, AF_INET, 0);
@@ -853,7 +851,7 @@ int uv__udp_recv_start(uv_udp_t* handle,
   handle->alloc_cb = alloc_cb;
   handle->recv_cb = recv_cb;
 
-  uv__io_start(handle->loop, &handle->io_watcher, POLLIN);
+  uv__io_start(handle->loop, &handle->io_watcher, UV__POLLIN);
   uv__handle_start(handle);
 
   return 0;
@@ -861,9 +859,9 @@ int uv__udp_recv_start(uv_udp_t* handle,
 
 
 int uv__udp_recv_stop(uv_udp_t* handle) {
-  uv__io_stop(handle->loop, &handle->io_watcher, POLLIN);
+  uv__io_stop(handle->loop, &handle->io_watcher, UV__POLLIN);
 
-  if (!uv__io_active(&handle->io_watcher, POLLOUT))
+  if (!uv__io_active(&handle->io_watcher, UV__POLLOUT))
     uv__handle_stop(handle);
 
   handle->alloc_cb = NULL;

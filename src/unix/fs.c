@@ -33,7 +33,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h> /* PATH_MAX */
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -81,10 +80,8 @@
       req->path = path;                                                       \
     } else {                                                                  \
       req->path = uv__strdup(path);                                           \
-      if (req->path == NULL) {                                                \
-        uv__req_unregister(loop, req);                                        \
+      if (req->path == NULL)                                                  \
         return -ENOMEM;                                                       \
-      }                                                                       \
     }                                                                         \
   }                                                                           \
   while (0)
@@ -100,10 +97,8 @@
       path_len = strlen(path) + 1;                                            \
       new_path_len = strlen(new_path) + 1;                                    \
       req->path = uv__malloc(path_len + new_path_len);                        \
-      if (req->path == NULL) {                                                \
-        uv__req_unregister(loop, req);                                        \
+      if (req->path == NULL)                                                  \
         return -ENOMEM;                                                       \
-      }                                                                       \
       req->new_path = req->path + path_len;                                   \
       memcpy((void*) req->path, path, path_len);                              \
       memcpy((void*) req->new_path, new_path, new_path_len);                  \
@@ -128,8 +123,8 @@
 static ssize_t uv__fs_fdatasync(uv_fs_t* req) {
 #if defined(__linux__) || defined(__sun) || defined(__NetBSD__)
   return fdatasync(req->file);
-#elif defined(__APPLE__) && defined(SYS_fdatasync)
-  return syscall(SYS_fdatasync, req->file);
+#elif defined(__APPLE__) && defined(F_FULLFSYNC)
+  return fcntl(req->file, F_FULLFSYNC);
 #else
   return fsync(req->file);
 #endif
@@ -206,13 +201,6 @@ skip:
 # else
   return futimes(req->file, tv);
 # endif
-#elif defined(_AIX71)
-  struct timespec ts[2];
-  ts[0].tv_sec  = req->atime;
-  ts[0].tv_nsec = (unsigned long)(req->atime * 1000000) % 1000000 * 1000;
-  ts[1].tv_sec  = req->mtime;
-  ts[1].tv_nsec = (unsigned long)(req->mtime * 1000000) % 1000000 * 1000;
-  return futimens(req->file, ts);
 #else
   errno = ENOSYS;
   return -1;
@@ -370,10 +358,9 @@ out:
   if (dents != NULL) {
     int i;
 
-    /* Memory was allocated using the system allocator, so use free() here. */
     for (i = 0; i < n; i++)
-      free(dents[i]);
-    free(dents);
+      uv__free(dents[i]);
+    uv__free(dents);
   }
   errno = saved_errno;
 
@@ -383,27 +370,20 @@ out:
 }
 
 
-static ssize_t uv__fs_pathmax_size(const char* path) {
-  ssize_t pathmax;
-
-  pathmax = pathconf(path, _PC_PATH_MAX);
-
-  if (pathmax == -1) {
-#if defined(PATH_MAX)
-    return PATH_MAX;
-#else
-#error "PATH_MAX undefined in the current platform"
-#endif
-  }
-
-  return pathmax;
-}
-
 static ssize_t uv__fs_readlink(uv_fs_t* req) {
   ssize_t len;
   char* buf;
 
-  len = uv__fs_pathmax_size(req->path);
+  len = pathconf(req->path, _PC_PATH_MAX);
+
+  if (len == -1) {
+#if defined(PATH_MAX)
+    len = PATH_MAX;
+#else
+    len = 4096;
+#endif
+  }
+
   buf = uv__malloc(len + 1);
 
   if (buf == NULL) {
@@ -424,27 +404,6 @@ static ssize_t uv__fs_readlink(uv_fs_t* req) {
   return 0;
 }
 
-static ssize_t uv__fs_realpath(uv_fs_t* req) {
-  ssize_t len;
-  char* buf;
-
-  len = uv__fs_pathmax_size(req->path);
-  buf = uv__malloc(len + 1);
-
-  if (buf == NULL) {
-    errno = ENOMEM;
-    return -1;
-  }
-
-  if (realpath(req->path, buf) == NULL) {
-    uv__free(buf);
-    return -1;
-  }
-
-  req->ptr = buf;
-
-  return 0;
-}
 
 static ssize_t uv__fs_sendfile_emul(uv_fs_t* req) {
   struct pollfd pfd;
@@ -615,14 +574,7 @@ static ssize_t uv__fs_sendfile(uv_fs_t* req) {
     r = sendfile(in_fd, out_fd, req->off, &len, NULL, 0);
 #endif
 
-     /*
-     * The man page for sendfile(2) on DragonFly states that `len` contains
-     * a meaningful value ONLY in case of EAGAIN and EINTR.
-     * Nothing is said about it's value in case of other errors, so better
-     * not depend on the potential wrong assumption that is was not modified
-     * by the syscall.
-     */
-    if (r == 0 || ((errno == EAGAIN || errno == EINTR) && len != 0)) {
+    if (r != -1 || len != 0) {
       req->off += len;
       return (ssize_t) len;
     }
@@ -667,9 +619,7 @@ static ssize_t uv__fs_write(uv_fs_t* req) {
    */
 #if defined(__APPLE__)
   static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
-  if (pthread_mutex_lock(&lock))
-    abort();
+  pthread_mutex_lock(&lock);
 #endif
 
   if (req->off < 0) {
@@ -726,8 +676,7 @@ static ssize_t uv__fs_write(uv_fs_t* req) {
 
 done:
 #if defined(__APPLE__)
-  if (pthread_mutex_unlock(&lock))
-    abort();
+  pthread_mutex_unlock(&lock);
 #endif
 
   return r;
@@ -758,13 +707,13 @@ static void uv__to_stat(struct stat* src, uv_stat_t* dst) {
   dst->st_gen = src->st_gen;
 #elif defined(__ANDROID__)
   dst->st_atim.tv_sec = src->st_atime;
-  dst->st_atim.tv_nsec = src->st_atimensec;
+  dst->st_atim.tv_nsec = src->st_atime_nsec;
   dst->st_mtim.tv_sec = src->st_mtime;
-  dst->st_mtim.tv_nsec = src->st_mtimensec;
+  dst->st_mtim.tv_nsec = src->st_mtime_nsec;
   dst->st_ctim.tv_sec = src->st_ctime;
-  dst->st_ctim.tv_nsec = src->st_ctimensec;
+  dst->st_ctim.tv_nsec = src->st_ctime_nsec;
   dst->st_birthtim.tv_sec = src->st_ctime;
-  dst->st_birthtim.tv_nsec = src->st_ctimensec;
+  dst->st_birthtim.tv_nsec = src->st_ctime_nsec;
   dst->st_flags = 0;
   dst->st_gen = 0;
 #elif !defined(_AIX) && (       \
@@ -867,14 +816,9 @@ static ssize_t uv__fs_buf_iter(uv_fs_t* req, uv__fs_buf_iter_processor process) 
     total += result;
   }
 
-  if (errno == EINTR && total == -1)
-    return total;
-
   if (bufs != req->bufsml)
     uv__free(bufs);
-
   req->bufs = NULL;
-  req->nbufs = 0;
 
   return total;
 }
@@ -916,7 +860,6 @@ static void uv__fs_work(struct uv__work* w) {
     X(READ, uv__fs_buf_iter(req, uv__fs_read));
     X(SCANDIR, uv__fs_scandir(req));
     X(READLINK, uv__fs_readlink(req));
-    X(REALPATH, uv__fs_realpath(req));
     X(RENAME, rename(req->path, req->new_path));
     X(RMDIR, rmdir(req->path));
     X(SENDFILE, uv__fs_sendfile(req));
@@ -1112,11 +1055,8 @@ int uv_fs_mkdtemp(uv_loop_t* loop,
                   uv_fs_cb cb) {
   INIT(MKDTEMP);
   req->path = uv__strdup(tpl);
-  if (req->path == NULL) {
-    if (cb != NULL)
-      uv__req_unregister(loop, req);
+  if (req->path == NULL)
     return -ENOMEM;
-  }
   POST;
 }
 
@@ -1152,11 +1092,8 @@ int uv_fs_read(uv_loop_t* loop, uv_fs_t* req,
   if (nbufs > ARRAY_SIZE(req->bufsml))
     req->bufs = uv__malloc(nbufs * sizeof(*bufs));
 
-  if (req->bufs == NULL) {
-    if (cb != NULL)
-      uv__req_unregister(loop, req);
+  if (req->bufs == NULL)
     return -ENOMEM;
-  }
 
   memcpy(req->bufs, bufs, nbufs * sizeof(*bufs));
 
@@ -1182,16 +1119,6 @@ int uv_fs_readlink(uv_loop_t* loop,
                    const char* path,
                    uv_fs_cb cb) {
   INIT(READLINK);
-  PATH;
-  POST;
-}
-
-
-int uv_fs_realpath(uv_loop_t* loop,
-                  uv_fs_t* req,
-                  const char * path,
-                  uv_fs_cb cb) {
-  INIT(REALPATH);
   PATH;
   POST;
 }
@@ -1290,11 +1217,8 @@ int uv_fs_write(uv_loop_t* loop,
   if (nbufs > ARRAY_SIZE(req->bufsml))
     req->bufs = uv__malloc(nbufs * sizeof(*bufs));
 
-  if (req->bufs == NULL) {
-    if (cb != NULL)
-      uv__req_unregister(loop, req);
+  if (req->bufs == NULL)
     return -ENOMEM;
-  }
 
   memcpy(req->bufs, bufs, nbufs * sizeof(*bufs));
 

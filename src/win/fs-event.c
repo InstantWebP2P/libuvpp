@@ -63,20 +63,19 @@ static void uv_fs_event_queue_readdirchanges(uv_loop_t* loop,
   handle->req_pending = 1;
 }
 
-static void uv_relative_path(const WCHAR* filename,
-                             const WCHAR* dir,
-                             WCHAR** relpath) {
-  size_t relpathlen;
-  size_t filenamelen = wcslen(filename);
-  size_t dirlen = wcslen(dir);
-  if (dirlen > 0 && dir[dirlen - 1] == '\\')
+static int uv_relative_path(const WCHAR* filename,
+                            const WCHAR* dir,
+	                    WCHAR** relpath) {
+  int dirlen = wcslen(dir);
+  int filelen = wcslen(filename);
+  if (dir[dirlen - 1] == '\\')
     dirlen--;
-  relpathlen = filenamelen - dirlen - 1;
-  *relpath = uv__malloc((relpathlen + 1) * sizeof(WCHAR));
+  *relpath = uv__malloc((MAX_PATH + 1) * sizeof(WCHAR));
   if (!*relpath)
     uv_fatal_error(ERROR_OUTOFMEMORY, "uv__malloc");
-  wcsncpy(*relpath, filename + dirlen + 1, relpathlen);
-  (*relpath)[relpathlen] = L'\0';
+  wcsncpy(*relpath, filename + dirlen + 1, filelen - dirlen - 1);
+  (*relpath)[filelen - dirlen - 1] = L'\0';
+  return 0;
 }
 
 static int uv_split_path(const WCHAR* filename, WCHAR** dir,
@@ -102,12 +101,12 @@ static int uv_split_path(const WCHAR* filename, WCHAR** dir,
     *file = wcsdup(filename);
   } else {
     if (dir) {
-      *dir = (WCHAR*)uv__malloc((i + 2) * sizeof(WCHAR));
+      *dir = (WCHAR*)uv__malloc((i + 1) * sizeof(WCHAR));
       if (!*dir) {
         uv_fatal_error(ERROR_OUTOFMEMORY, "uv__malloc");
       }
-      wcsncpy(*dir, filename, i + 1);
-      (*dir)[i + 1] = L'\0';
+      wcsncpy(*dir, filename, i);
+      (*dir)[i] = L'\0';
     }
 
     *file = (WCHAR*)uv__malloc((len - i) * sizeof(WCHAR));
@@ -160,20 +159,14 @@ int uv_fs_event_start(uv_fs_event_t* handle,
   uv__handle_start(handle);
 
   /* Convert name to UTF16. */
-
-  name_size = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0) *
-              sizeof(WCHAR);
+  name_size = uv_utf8_to_utf16(path, NULL, 0) * sizeof(WCHAR);
   pathw = (WCHAR*)uv__malloc(name_size);
   if (!pathw) {
     uv_fatal_error(ERROR_OUTOFMEMORY, "uv__malloc");
   }
 
-  if (!MultiByteToWideChar(CP_UTF8,
-                           0,
-                           path,
-                           -1,
-                           pathw,
-                           name_size / sizeof(WCHAR))) {
+  if (!uv_utf8_to_utf16(path, pathw,
+      name_size / sizeof(WCHAR))) {
     return uv_translate_sys_error(GetLastError());
   }
 
@@ -347,10 +340,9 @@ int uv_fs_event_stop(uv_fs_event_t* handle) {
 void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
     uv_fs_event_t* handle) {
   FILE_NOTIFY_INFORMATION* file_info;
-  int err, sizew, size;
+  int err, sizew, size, result;
   char* filename = NULL;
-  WCHAR* filenamew = NULL;
-  WCHAR* long_filenamew = NULL;
+  WCHAR* filenamew, *long_filenamew = NULL;
   DWORD offset = 0;
 
   assert(req->type == UV_FS_EVENT_REQ);
@@ -375,7 +367,6 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
       do {
         file_info = (FILE_NOTIFY_INFORMATION*)((char*)file_info + offset);
         assert(!filename);
-        assert(!filenamew);
         assert(!long_filenamew);
 
         /*
@@ -390,10 +381,9 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
 
           if (handle->dirw) {
             /*
-             * We attempt to resolve the long form of the file name explicitly.
-             * We only do this for file names that might still exist on disk.
-             * If this fails, we use the name given by ReadDirectoryChangesW.
-             * This may be the long form or the 8.3 short name in some cases.
+             * We attempt to convert the file name to its long form for
+             * events that still point to valid files on disk.
+             * For removed and renamed events, we do not provide the file name.
              */
             if (file_info->Action != FILE_ACTION_REMOVED &&
               file_info->Action != FILE_ACTION_RENAMED_OLD_NAME) {
@@ -434,25 +424,30 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
 
               if (long_filenamew) {
                 /* Get the file name out of the long path. */
-                uv_relative_path(long_filenamew,
-                                 handle->dirw,
-                                 &filenamew);
+                result = uv_relative_path(long_filenamew,
+                                          handle->dirw,
+                                          &filenamew);
                 uv__free(long_filenamew);
-                long_filenamew = filenamew;
-                sizew = -1;
-              } else {
-                /* We couldn't get the long filename, use the one reported. */
+
+                if (result == 0) {
+                  long_filenamew = filenamew;
+                  sizew = -1;
+                } else {
+                  long_filenamew = NULL;
+                }
+              }
+
+              /*
+               * If we couldn't get the long name - just use the name
+               * provided by ReadDirectoryChangesW.
+               */
+              if (!long_filenamew) {
                 filenamew = file_info->FileName;
                 sizew = file_info->FileNameLength / sizeof(WCHAR);
               }
             } else {
-              /*
-               * Removed or renamed events cannot be resolved to the long form.
-               * We therefore use the name given by ReadDirectoryChangesW.
-               * This may be the long form or the 8.3 short name in some cases.
-               */
-              filenamew = file_info->FileName;
-              sizew = file_info->FileNameLength / sizeof(WCHAR);
+              /* Removed or renamed callbacks don't provide filename. */
+              filenamew = NULL;
             }
           } else {
             /* We already have the long name of the file, so just use it. */
@@ -460,8 +455,30 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
             sizew = -1;
           }
 
-          /* Convert the filename to utf8. */
-          uv__convert_utf16_to_utf8(filenamew, sizew, &filename);
+          if (filenamew) {
+            /* Convert the filename to utf8. */
+            size = uv_utf16_to_utf8(filenamew,
+                                    sizew,
+                                    NULL,
+                                    0);
+            if (size) {
+              filename = (char*)uv__malloc(size + 1);
+              if (!filename) {
+                uv_fatal_error(ERROR_OUTOFMEMORY, "uv__malloc");
+              }
+
+              size = uv_utf16_to_utf8(filenamew,
+                                      sizew,
+                                      filename,
+                                      size);
+              if (size) {
+                filename[size] = '\0';
+              } else {
+                uv__free(filename);
+                filename = NULL;
+              }
+            }
+          }
 
           switch (file_info->Action) {
             case FILE_ACTION_ADDED:
@@ -480,7 +497,6 @@ void uv_process_fs_event_req(uv_loop_t* loop, uv_req_t* req,
           filename = NULL;
           uv__free(long_filenamew);
           long_filenamew = NULL;
-          filenamew = NULL;
         }
 
         offset = file_info->NextEntryOffset;
