@@ -15,9 +15,12 @@
 ACLOCAL_AMFLAGS = -I m4
 
 AM_CPPFLAGS = -I$(top_srcdir)/include \
-              -I$(top_srcdir)/src
+              -I$(top_srcdir)/src \
+              -I$(top_srcdir)/uudt \
+              -I$(top_srcdir)/uvudt/UDT4/src \
+              -DEVPIPE_OSFD
 
-include_HEADERS=include/uv.h
+include_HEADERS=include/uv.h uvudt/uvudt.h
 
 uvincludedir = $(includedir)/uv
 uvinclude_HEADERS = include/uv/errno.h \
@@ -43,7 +46,23 @@ libuv_la_SOURCES = src/fs-poll.c \
                    src/uv-data-getter-setters.c \
                    src/uv-common.c \
                    src/uv-common.h \
-                   src/version.c
+                   src/version.c \
+                   \
+                   uvudt/UDT4/src/api.cpp \
+                   uvudt/UDT4/src/buffer.cpp \
+                   uvudt/UDT4/src/cache.cpp \
+                   uvudt/UDT4/src/ccc.cpp \
+                   uvudt/UDT4/src/channel.cpp \
+                   uvudt/UDT4/src/common.cpp \
+                   uvudt/UDT4/src/udt_core.cpp \
+                   uvudt/UDT4/src/epoll.cpp \
+                   uvudt/UDT4/src/list.cpp \
+                   uvudt/UDT4/src/md5.cpp \
+                   uvudt/UDT4/src/packet.cpp \
+                   uvudt/UDT4/src/queue.cpp \
+                   uvudt/UDT4/src/udtc.cpp \
+                   uvudt/UDT4/src/window.cpp \
+                   uvudt/uvudt.c
 
 if SUNOS
 # Can't be turned into a CC_CHECK_CFLAGS in configure.ac, it makes compilers
@@ -56,7 +75,8 @@ if WINNT
 uvinclude_HEADERS += include/uv/win.h include/uv/tree.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/win \
                -DWIN32_LEAN_AND_MEAN \
-               -D_WIN32_WINNT=0x0600
+               -D_WIN32_WINNT=0x0600 \
+               -DWIN32=1 
 libuv_la_SOURCES += src/win/async.c \
                     src/win/atomicops-inl.h \
                     src/win/core.c \
@@ -405,6 +425,7 @@ libuv_la_SOURCES += src/unix/cygwin.c \
 endif
 
 if DARWIN
+AM_CPPFLAGS += -DDARWIN=1 -DOSX=1 
 uvinclude_HEADERS += include/uv/darwin.h
 libuv_la_CFLAGS += -D_DARWIN_USE_64_BIT_INODE=1
 libuv_la_CFLAGS += -D_DARWIN_UNLIMITED_SELECT=1
@@ -429,6 +450,7 @@ test_run_tests_LDFLAGS += -lutil
 endif
 
 if FREEBSD
+AM_CPPFLAGS += -DFREEBSD=1 
 uvinclude_HEADERS += include/uv/bsd.h
 libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
                     src/unix/bsd-proctitle.c \
@@ -458,8 +480,9 @@ libuv_la_SOURCES += src/unix/no-fsevents.c \
 endif
 
 if LINUX
+AM_CPPFLAGS += -DLINUX=1 
 uvinclude_HEADERS += include/uv/linux.h
-libuv_la_CFLAGS += -D_GNU_SOURCE
+libuv_la_CFLAGS += -D_GNU_SOURCE 
 libuv_la_SOURCES += src/unix/linux-core.c \
                     src/unix/linux-inotify.c \
                     src/unix/linux-syscalls.c \
