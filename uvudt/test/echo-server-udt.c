@@ -16,6 +16,8 @@ static uv_loop_t* loop;
 static int server_closed;
 static uvudt_t udtServer;
 static uvudt_t *server;
+static uvudt_t udt6Server;
+static uvudt_t *server6;
 
 static void after_write(uvudt_write_t* req, int status);
 static void after_read(uvudt_t*, ssize_t nread, const uv_buf_t* buf);
@@ -36,14 +38,14 @@ static void after_write(uvudt_write_t* req, int status) {
     return;
 
   fprintf(stderr,
-          "uv_write error: %s - %s\n",
+          "uvudt_write error: %s - %s\n",
           uv_err_name(status),
           uv_strerror(status));
 }
 
 
-static void after_shutdown(uv_shutdown_t* req, int status) {
-  uv_close((uv_handle_t*) req->handle, on_close);
+static void after_shutdown(uvudt_shutdown_t* req, int status) {
+  uvudt_close( req->handle, on_close);
   free(req);
 }
 
@@ -53,7 +55,7 @@ static void after_read(uvudt_t* handle,
                        const uv_buf_t* buf) {
   int i;
   write_req_t *wr;
-  uv_shutdown_t* sreq;
+  uvudt_shutdown_t* sreq;
 
   if (nread < 0) {
     /* Error or EOF */
@@ -61,7 +63,7 @@ static void after_read(uvudt_t* handle,
 
     free(buf->base);
     sreq = malloc(sizeof* sreq);
-    assert(0 == uv_shutdown(sreq, handle, after_shutdown));
+    assert(0 == uvudt_shutdown(sreq, handle, after_shutdown));
     return;
   }
 
@@ -71,31 +73,12 @@ static void after_read(uvudt_t* handle,
     return;
   }
 
-  /*
-   * Scan for the letter Q which signals that we should quit the server.
-   * If we get QS it means close the stream.
-   */
-  if (!server_closed) {
-    for (i = 0; i < nread; i++) {
-      if (buf->base[i] == 'Q') {
-        if (i + 1 < nread && buf->base[i + 1] == 'S') {
-          free(buf->base);
-          uv_close(handle, on_close);
-          return;
-        } else {
-          uvudt_close(server, on_server_close);
-          server_closed = 1;
-        }
-      }
-    }
-  }
-
   wr = (write_req_t*) malloc(sizeof *wr);
   assert(wr != NULL);
   wr->buf = uv_buf_init(buf->base, nread);
 
-  if (uv_write(&wr->req, handle, &wr->buf, 1, after_write)) {
-    printf("uv_write failed");
+  if (uvudt_write(&wr->req, handle, &wr->buf, 1, after_write)) {
+    printf("uvudt_write failed");
   }
 }
 
@@ -127,7 +110,7 @@ static void on_connection(uvudt_t* server, int status) {
 
   if (status != 0) {
     fprintf(stderr, "Connect error %s\n", uv_err_name(status));
-  }
+  } else printf("Connect success\n");
   assert(status == 0);
 
     stream = malloc(sizeof(uvudt_t));
@@ -142,6 +125,7 @@ static void on_connection(uvudt_t* server, int status) {
   assert(r == 0);
 
   r = uvudt_read_start(stream, echo_alloc, after_read);
+
   assert(r == 0);
 }
 
@@ -156,7 +140,7 @@ static int udt4_echo_start(int port) {
 
   assert(0 == uv_ip4_addr("0.0.0.0", port, &addr));
 
-  server = (uv_handle_t*)&udtServer;
+  server = &udtServer;
 
   r = uvudt_init(loop, &udtServer);
   if (r) {
@@ -189,9 +173,9 @@ static int udt6_echo_start(int port) {
 
   assert(0 == uv_ip6_addr("::1", port, &addr6));
 
-  server = (uv_handle_t*)&udtServer;
+  server6 = &udt6Server;
 
-  r = uvudt_init(loop, &udtServer);
+  r = uvudt_init(loop, &udt6Server);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Socket creation error\n");
@@ -199,14 +183,14 @@ static int udt6_echo_start(int port) {
   }
 
   /* IPv6 is optional as not all platforms support it */
-  r = uvudt_bind(&udtServer, (const struct sockaddr*) &addr6, 1, 1);
+  r = uvudt_bind(&udt6Server, (const struct sockaddr*) &addr6, 1, 1);
   if (r) {
     /* show message but return OK */
     fprintf(stderr, "IPv6 not supported\n");
     return 0;
   }
 
-  r = uvudt_listen((uvudt_t*)&udtServer, SOMAXCONN, on_connection);
+  r = uvudt_listen((uvudt_t*)&udt6Server, SOMAXCONN, on_connection);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Listen error\n");

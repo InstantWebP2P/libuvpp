@@ -4,28 +4,28 @@
 #include "uv.h"
 #include "udtqueue.h"
 
-// data type forward declare
+// data type declare
 struct uvudt_connect_s;
 struct uvudt_shutdown_s;
 struct uvudt_write_s;
 struct uvudt_s;
 
 // callback declare
-typedef void (*uvudt_connect_cb)(struct uvudt_connect_s *req, int status);
-typedef void (*uvudt_shutdown_cb)(struct uvudt_shutdown_s *req, int status);
-typedef void (*uvudt_write_cb)(struct uvudt_write_s *req, int status);
-typedef void (*uvudt_read_cb)(struct uvudt_s *stream, ssize_t nread, const uv_buf_t *buf);
-typedef void (*uvudt_connection_cb)(struct uvudt_s *server, int status);
+typedef void (* uvudt_connect_cb)(struct uvudt_connect_s *req, int status);
+typedef void (* uvudt_shutdown_cb)(struct uvudt_shutdown_s *req, int status);
+typedef void (* uvudt_write_cb)(struct uvudt_write_s *req, int status);
+typedef void (* uvudt_read_cb)(struct uvudt_s *stream, ssize_t nread, const uv_buf_t *buf);
+typedef void (* uvudt_connection_cb)(struct uvudt_s *server, int status);
 
 //
 enum uvudt_flags_t
 {
-    UVUDT_FLAG_READABLE = 0x1,
-    UVUDT_FLAG_WRITABLE = 0x2,
-    UVUDT_FLAG_SHUT = 0x4,
-    UVUDT_FLAG_SHUTTING = 0x8,
-    UVUDT_FLAG_CLOSING = 0x10,
-    UVUDT_FLAG_CLOSED = 0x20,
+    UVUDT_FLAG_READABLE = 0x01,
+    UVUDT_FLAG_WRITABLE = 0x02,
+    UVUDT_FLAG_SHUT     = 0x04,
+    UVUDT_FLAG_SHUTTING = 0x08,
+    UVUDT_FLAG_CLOSING  = 0x10,
+    UVUDT_FLAG_CLOSED   = 0x20,
 };
 
 // uvudt_t
@@ -61,42 +61,50 @@ struct uvudt_s
 };
 typedef struct uvudt_s uvudt_t;
 
+// request type
+enum uvudt_req_t
+{
+    UVUDT_REQ_CONNECT  = 1,
+    UVUDT_REQ_SHUTDOWN = 2,
+    UVUDT_REQ_WRITE    = 3,
+};
+
 // uvudt_connect_t
 struct uvudt_connect_s
 {
-    uv_req_t req;
-
+    int type;
     int error;
+    uvudt_t *handle;
+
     void *queue[2];
 
     uvudt_connect_cb cb;
-    uvudt_t *handle;
 };
 typedef struct uvudt_connect_s uvudt_connect_t;
 
 // uvudt_shutdown_t
 struct uvudt_shutdown_s {
-    uv_req_t req;
+    int type;
     int error;
+    uvudt_t *handle;
 
     uvudt_shutdown_cb cb;
-    uvudt_t *handle;
 };
 typedef struct uvudt_shutdown_s uvudt_shutdown_t;
 
 // uvudt_write_t
 struct uvudt_write_s {
-    uv_req_t req;
+    int type;
+    int error;
+    uvudt_t *handle;
 
     void *queue[2];
     unsigned int write_index;
     uv_buf_t *bufs;
     unsigned int nbufs;
-    int error;
     uv_buf_t bufsml[4];
 
     uvudt_write_cb cb;
-    uvudt_t *handle;
 };
 typedef struct uvudt_write_s uvudt_write_t;
 
@@ -111,27 +119,27 @@ UV_EXTERN int uvudt_keepalive(uvudt_t *handle,
 UV_EXTERN int uvudt_simultaneous_accepts(uvudt_t *handle, int enable);
 
 UV_EXTERN int uvudt_bind(uvudt_t *handle, 
-                         struct sockaddr *addr, 
+                         const struct sockaddr *addr, 
                          int reuseaddr, 
                          int reuseable);
 
 UV_EXTERN int uvudt_getsockname(uvudt_t *handle, 
-                                struct sockaddr *name, 
+                                const struct sockaddr *name, 
                                 int *namelen);
 
 UV_EXTERN int uvudt_getpeername(uvudt_t *handle, 
-                                struct sockaddr *name, 
+                                const struct sockaddr *name, 
                                 int *namelen);
 
 UV_EXTERN int uvudt_close(uvudt_t *handle, uv_close_cb close_cb);
 
 UV_EXTERN int uvudt_connect(uvudt_connect_t *req, 
                             uvudt_t *handle, 
-                            struct sockaddr *addr, 
+                            const struct sockaddr *addr, 
                             uvudt_connect_cb cb);
 
 UV_EXTERN int uvudt_punchhole(uvudt_t *handle, 
-                              struct sockaddr *addr, 
+                              const struct sockaddr *addr, 
                               int32_t from, 
                               int32_t to);
 
@@ -214,7 +222,7 @@ UV_EXTERN int uvudt_reuseaddr(uvudt_t *handle, int32_t yes);
 UV_EXTERN int uvudt_reuseable(uvudt_t *handle, int32_t yes);
 
 // UDT network performance track
-typedef struct
+typedef struct uvudt_netperf_s
 {
     // global measurements
     int64_t msTimeStamp;        // time since the UDT entity is started, in milliseconds

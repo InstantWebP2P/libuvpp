@@ -51,19 +51,19 @@ void udt__stream_init(uv_loop_t* loop, uvudt_t* stream) {
 }
 
 int udt__stream_open(uvudt_t* udt, uv_os_sock_t fd, int flags) {
-    uv_poll_t poll = udt->poll;
+    uv_poll_t *poll = (uv_poll_t *)udt;
 
     udt->fd = fd;
 
     // init uv_poll_t
-    if (uv_poll_init_socket(udt->aloop, &poll, fd) < 0)
+    if (uv_poll_init_socket(udt->aloop, poll, fd) < 0)
     {
         udt_close(udt->udtfd);
         return -1;
     }
 
     // start polling
-    if (uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io) < 0)
+    if (uv_poll_start(poll, UV_READABLE, udt__stream_io) < 0)
     {
         udt_close(udt->udtfd);
         return -1;
@@ -78,7 +78,7 @@ int udt__stream_open(uvudt_t* udt, uv_os_sock_t fd, int flags) {
 void udt__stream_destroy(uvudt_t* stream) {
   uvudt_write_t* req;
   QUEUE *q;
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
 
   if (stream->connect_req) {
@@ -117,17 +117,15 @@ void udt__stream_destroy(uvudt_t* stream) {
   }
 
   if (stream->shutdown_req) {
-    stream->shutdown_req->cb(stream->shutdown_req, UV_ECANCELED);
-    stream->shutdown_req = NULL;
+      if (stream->shutdown_req->cb)
+          stream->shutdown_req->cb(stream->shutdown_req, UV_ECANCELED);
+      stream->shutdown_req = NULL;
   }
 }
 
 void udt__server_io(uv_poll_t *handle, int status, int events) {
     uvudt_t *stream = (uvudt_t *)handle;
-    
     int fd, udtfd, optlen;
-    
-    printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, stream->udtfd, stream->fd);
 
 
     assert(handle->type == UV_POLL);
@@ -138,18 +136,13 @@ void udt__server_io(uv_poll_t *handle, int status, int events) {
     {
         udt_consume_osfd(stream->fd);
     }
-    printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, stream->udtfd, stream->fd);
 
     if (stream->accepted_udtfd != -1)
     {
-        // stop polling
-        uv_poll_stop(handle);
         return;
     }
     
-    while (stream->udtfd != -1) {
-        assert(stream->accepted_udtfd == -1);
-    
+    while (stream->udtfd != -1) {          
 		  udtfd = udt__accept(stream->udtfd);
 
 		  if (udtfd < 0) {
@@ -157,26 +150,24 @@ void udt__server_io(uv_poll_t *handle, int status, int events) {
 
 			  if (udt_getlasterror_code() == UDT_EASYNCRCV /*errno == EAGAIN || errno == EWOULDBLOCK*/) {
 				  /* No problem. */
-				  errno = EAGAIN;
+				  ///errno = EAGAIN;
 				  return;
 			  } else if (udt_getlasterror_code() == UDT_ESECFAIL /*errno == ECONNABORTED*/) {
 				  /* ignore */
-				  errno = ECONNABORTED;
+				  ///errno = ECONNABORTED;
 				  continue;
 			  } else {
 				  //////udt__set_sys_error(udt->loop, uvudt_translate_udt_error());
-				  stream->connection_cb(stream, -1);
+				  stream->connection_cb(stream, UV_ECONNREFUSED);
 			  }
 		  } else {
 			  stream->accepted_udtfd = udtfd;
-
 			  // fill Os fd
 			  assert(udt_getsockopt(udtfd, 0, (int)UDT_UDT_OSFD, &stream->accepted_fd, &optlen) == 0);
               
               stream->connection_cb(stream, 0);
 			  if (stream->accepted_udtfd != -1) {
 				  /* The user hasn't yet accepted called uvudt_accept() */
-                  uv_poll_stop(handle);
                   return;
 			  }
 		  }
@@ -188,11 +179,11 @@ int uvudt_accept(uvudt_t* server, uvudt_t* client) {
   uvudt_t* streamServer;
   uvudt_t* streamClient;
   int status;
-  uv_poll_t srvpoll = server->poll;
-  uv_poll_t clnpoll = client->poll;
+  uv_poll_t *srvpoll = &server->poll;
+  uv_poll_t *clnpoll = &client->poll;
 
   /* TODO document this */
-  assert(srvpoll.loop == clnpoll.loop);
+  assert(server->aloop == client->aloop);
 
   status = -1;
 
@@ -216,12 +207,6 @@ int uvudt_accept(uvudt_t* server, uvudt_t* client) {
 	  goto out;
   }
 
-  if (uv_poll_start(&srvpoll, UV_READABLE | UV_DISCONNECT, udt__server_io) < 0)
-  {
-      udt_close(streamServer->udtfd);
-      goto out;
-  }
-
   streamServer->accepted_udtfd = -1;
   status = 0;
 
@@ -243,7 +228,7 @@ uvudt_write_t* uvudt_write_queue_head(uvudt_t* stream) {
     return NULL;
   }
 
-  req = QUEUE_DATA(q, struct uv_write_s, queue);
+  req = QUEUE_DATA(q, uvudt_write_t, queue);
   assert(req);
 
   return req;
@@ -252,7 +237,7 @@ uvudt_write_t* uvudt_write_queue_head(uvudt_t* stream) {
 
 static void udt__drain(uvudt_t* stream) {
   uvudt_shutdown_t* req;
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
   assert(!uvudt_write_queue_head(stream));
   assert(stream->write_queue_size == 0);
@@ -267,21 +252,9 @@ static void udt__drain(uvudt_t* stream) {
     stream->shutdown_req = NULL;
 
     // UDT don't need drain
-    {
-    	// clear pending Os fd event
-    	udt_consume_osfd(stream->fd);
-
-    	if (udt_close(stream->udtfd)) {
-    		/* Error. Report it. User should call uv_close(). */
-    		if (req->cb) {
-    			req->cb(req, -1);
-    		}
-    	} else {
-    		stream->flags |= UVUDT_FLAG_SHUT;
-    		if (req->cb) {
-    			req->cb(req, 0);
-    		}
-    	}
+    stream->flags |= UVUDT_FLAG_SHUT;
+    if (req->cb) {
+        req->cb(req, 0);
     }
   }
 }
@@ -300,7 +273,7 @@ static size_t udt__write_req_size(uvudt_write_t* req) {
 
 static void udt__write_req_finish(uvudt_write_t* req) {
   uvudt_t* stream = req->handle;
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
   /* Pop the req off tcp->write_queue. */
   QUEUE_REMOVE(&req->queue);
@@ -328,10 +301,10 @@ static void udt__write(uvudt_t* stream) {
   uv_buf_t *iov;
   int iovcnt;
   ssize_t n;
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
 
-  if (poll.flags & UVUDT_FLAG_CLOSING) {
+  if ((stream->flags & UVUDT_FLAG_CLOSING)) {
     /* Handle was closed this tick. We've received a stale
      * 'is writable' callback from the event loop, ignore.
      */
@@ -425,13 +398,13 @@ start:
   assert(n == 0 || n == -1);
 
   /* We're not done. */
-  uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
+
 }
 
 static void udt__write_callbacks(uvudt_t* stream) {
   uvudt_write_t* req;
   QUEUE* q;
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
   while (!QUEUE_EMPTY(&stream->write_completed_queue)) {
     /* Pop a req off write_completed_queue. */
@@ -461,7 +434,7 @@ static void udt__read(uvudt_t* stream) {
   struct cmsghdr* cmsg;
   char cmsg_space[64];
   int count;
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
 
   /* Prevent loop starvation when the data comes in as fast as (or faster than)
@@ -469,9 +442,6 @@ static void udt__read(uvudt_t* stream) {
    */
   count = 32;
 
-  /* XXX: Maybe instead of having UVUDT_FLAG_READABLE we just test if
-   * tcp->read_cb is NULL or not?
-   */
   while ((stream->read_cb)
       && (stream->flags & UVUDT_FLAG_READABLE)
       && (count-- > 0)) {
@@ -489,19 +459,14 @@ static void udt__read(uvudt_t* stream) {
 
     assert(stream->udtfd != -1);
 
-    // udt recv
+    // UDT recv
     {
-    	if (stream->read_cb) {
-    		nread = udt_recv(stream->udtfd, buf.base, buf.len, 0);
-    		if (nread <= 0) {
-    			// consume Os fd event
-    			///udt_consume_osfd(stream->fd);
-    		}
-    		///fprintf(stdout, "func:%s, line:%d, expect rd: %d, real rd: %d\n", __FUNCTION__, __LINE__, buf.len, nread);
-    	} else {
-    		// never support recvmsg on udt for now
-    		assert(0);
+        nread = udt_recv(stream->udtfd, buf.base, buf.len, 0);
+        if (nread <= 0) {
+            // consume Os fd event
+            ///udt_consume_osfd(stream->fd);
     	}
+        ///fprintf(stdout, "func:%s, line:%d, expect rd: %d, real rd: %d\n", __FUNCTION__, __LINE__, buf.len, nread);
 
     	if (nread < 0) {
     		/* Error */
@@ -509,72 +474,25 @@ static void udt__read(uvudt_t* stream) {
 
     		if (udterr == EAGAIN) {
     			/* Wait for the next one. */
-    			if (stream->flags & UVUDT_FLAG_READABLE) {
-    				///udt__io_start(udt->loop, &stream->read_watcher);
-                    uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
-                }
-                //////udt__set_sys_error(udt->loop, EAGAIN);
-
-    			if (stream->read_cb) {
-    				stream->read_cb(stream, 0, &buf);
-    			} else {
-    				// never go here
-    				assert(0);
-    			}
-
+                stream->read_cb(stream, 0, &buf);
     			return;
     		} else if ((udterr == EPIPE) || (udterr == ENOTSOCK)) {
                 // socket broken or invalid socket as EOF
-
-        		/* EOF */
-        		///udt__set_artificial_error(udt->loop, UV_EOF);
-        		///udt__io_stop(udt->loop, &stream->read_watcher);
-                uv_poll_stop(&poll);
-
-        		///if (!udt__io_active(&stream->write_watcher))
-                ///udt__handle_stop(stream);
-
-        		if (stream->read_cb) {
-        			stream->read_cb(stream, -1, &buf);
-        		} else {
-        			// never come here
-        			assert(0);
-        		}
+                stream->read_cb(stream, UV_EOF, &buf);
         		return;
     		} else {
     			/* Error. User should call uv_close(). */
-    			//////udt__set_sys_error(udt->loop, udterr);
-
-    			///udt__io_stop(udt->loop, &stream->read_watcher);
-    			///if (!udt__io_active(&stream->write_watcher))
-    			///   udt__handle_stop(stream);
-                uv_poll_stop(&poll);
-
-                if (stream->read_cb) {
-    				stream->read_cb(stream, -1, &buf);
-    			} else {
-    				// never come here
-    				assert(0);
-    			}
-
-    			///assert(!udt__io_active(&stream->read_watcher));
+                stream->read_cb(stream, UV_EIO, &buf);
     			return;
     		}
-
     	} else if (nread == 0) {
     		// never go here
-    		assert(0);
-    		return;
-    	} else {
+            stream->read_cb(stream, 0, &buf);
+            return;
+        } else {
     		/* Successful read */
     		ssize_t buflen = buf.len;
-
-    		if (stream->read_cb) {
-    			stream->read_cb(stream, nread, &buf);
-    		} else {
-    			// never support recvmsg on udt for now
-    			assert(0);
-    		}
+            stream->read_cb(stream, nread, &buf);
 
     		/* Return if we didn't fill the buffer, there is no more data to read. */
     		if (nread < buflen) {
@@ -587,9 +505,9 @@ static void udt__read(uvudt_t* stream) {
 
 
 int uvudt_shutdown(uvudt_shutdown_t* req, uvudt_t* stream, uvudt_shutdown_cb cb) {
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
-  assert((poll.type == UV_POLL) &&
+  assert((poll->type == UV_POLL) &&
          "uvudt_shutdown (unix) only supports uv_handle_t right now");
   assert(stream->udtfd != -1);
 
@@ -601,13 +519,11 @@ int uvudt_shutdown(uvudt_shutdown_t* req, uvudt_t* stream, uvudt_shutdown_cb cb)
   }
 
   /* Initialize request */
-  req->req.type = UV_SHUTDOWN;
+  req->type = UVUDT_REQ_SHUTDOWN;
   req->handle = stream;
   req->cb = cb;
   stream->shutdown_req = req;
   stream->flags |= UVUDT_FLAG_SHUTTING;
-
-  uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
 
   return 0;
 }
@@ -658,7 +574,7 @@ static void udt__stream_connect(uvudt_t* stream) {
   int error;
   uvudt_connect_t* req = stream->connect_req;
   socklen_t errorsize = sizeof(int);
-  uv_poll_t poll = stream->poll;
+  uv_poll_t *poll = (uv_poll_t *)stream;
 
   assert(req);
 
@@ -698,7 +614,7 @@ static void udt__stream_connect(uvudt_t* stream) {
 
   if (req->cb) {
     //////udt__set_sys_error(udt->loop, error);
-    req->cb(req, error ? -1 : 0);
+    req->cb(req, error ? UV_ECONNREFUSED : 0);
   }
 }
 
@@ -709,7 +625,7 @@ static void udt__stream_connect(uvudt_t* stream) {
 int uvudt_write(uvudt_write_t *req, uvudt_t *stream, const uv_buf_t bufs[], unsigned int nbufs, uvudt_write_cb cb)
 {
     int empty_queue;
-    uv_poll_t poll = stream->poll;
+    uv_poll_t *poll = (uv_poll_t *)stream;
 
     if (stream->udtfd < 0)
     {
@@ -717,11 +633,20 @@ int uvudt_write(uvudt_write_t *req, uvudt_t *stream, const uv_buf_t bufs[], unsi
         return -1;
     }
 
+    // check flags
+    int flags = stream->flags;
+    if (!(flags & UVUDT_FLAG_WRITABLE) ||
+         (flags & UVUDT_FLAG_SHUTTING) || (flags & UVUDT_FLAG_SHUT) ||
+         (flags & UVUDT_FLAG_CLOSING)  || (flags & UVUDT_FLAG_CLOSED))
+    {
+        printf("uvudt write rejected\n");
+        return -1;
+    }
+
     empty_queue = (stream->write_queue_size == 0);
 
     /* Initialize the req */
-    ///udt__req_init(udt->loop, req, UV_WRITE);
-    req->req.type = UV_WRITE;
+    req->type = UVUDT_REQ_WRITE;
     req->cb = cb;
     req->handle = stream;
     req->error = 0;
@@ -753,21 +678,9 @@ int uvudt_write(uvudt_write_t *req, uvudt_t *stream, const uv_buf_t bufs[], unsi
     else if (empty_queue)
     {
         udt__write(stream);
-    }
-    else
-    {/*
-     * blocking streams should never have anything in the queue.
-     * if this assert fires then somehow the blocking stream isn't being
-     * sufficiently flushed in udt__write.
-     */
-        ///assert(!(stream->flags & UV_HANDLE_BLOCKING_WRITES));
-        ///udt__io_start(udt->loop, &stream->write_watcher);
-        // start polling
-        if (uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io) < 0)
-        {
-            udt_close(stream->udtfd);
-            return -1;
-        }
+    } else {
+        printf("uvudt write no buffer\n");
+        return UV_ENOBUFS;
     }
 
     return 0;
@@ -777,15 +690,8 @@ int uvudt_write(uvudt_write_t *req, uvudt_t *stream, const uv_buf_t bufs[], unsi
 int uvudt_read_start(uvudt_t *stream, uv_alloc_cb alloc_cb,
                      uvudt_read_cb read_cb)
 {
-    uv_poll_t poll = stream->poll;
-
-    assert(poll.type == UV_POLL);
-
-    if (poll.flags & UVUDT_FLAG_CLOSING)
-    {
-        //////udt__set_sys_error(udt->loop, EINVAL);
-        return -1;
-    }
+    uv_poll_t *poll = (uv_poll_t *)stream;
+    assert(poll->type == UV_POLL);
     
     /* The UVUDT_FLAG_READABLE flag is irrelevant of the state of the tcp - it just
    * expresses the desired state of the user.
@@ -802,9 +708,8 @@ int uvudt_read_start(uvudt_t *stream, uv_alloc_cb alloc_cb,
     stream->read_cb = read_cb;
     stream->alloc_cb = alloc_cb;
 
-    if (uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io) < 0)
+    if (uv_poll_start(poll, UV_READABLE, udt__stream_io) < 0)
     {
-        udt_close(stream->udtfd);
         return -1;
     }
 
@@ -813,48 +718,28 @@ int uvudt_read_start(uvudt_t *stream, uv_alloc_cb alloc_cb,
 
 
 int uvudt_read_stop(uvudt_t* stream) {
-  ///udt__io_stop(udt->loop, &stream->read_watcher);
-  ///udt__handle_stop(stream);
-  uv_poll_t poll = stream->poll;
-  uv_poll_stop(&poll);
+    uv_poll_t *poll = (uv_poll_t *)stream;
+    assert(poll->type == UV_POLL);
 
-  stream->flags &= ~UVUDT_FLAG_READABLE;
-  stream->read_cb = NULL;
-  stream->alloc_cb = NULL;
-  return 0;
+    if (uv_poll_stop(poll) < 0)
+    {
+        return -1;
+    }
+    
+    stream->flags   &= ~UVUDT_FLAG_READABLE;
+    stream->read_cb  = NULL;
+    stream->alloc_cb = NULL;
+    
+    return 0;
 }
 
 
 int uvudt_is_readable(uvudt_t* stream) {
-    uv_poll_t poll = stream->poll;
-
     return stream->flags & UVUDT_FLAG_READABLE;
 }
 
 
 int uvudt_is_writable(uvudt_t* stream) {
-    uv_poll_t poll = stream->poll;
-
     return stream->flags & UVUDT_FLAG_WRITABLE;
 }
 
-
-void udt__stream_close(uvudt_t* stream) {
-    uv_poll_t poll = stream->poll;
-
-    uvudt_read_stop(stream);
-    ///udt__io_stop(handle->loop, &handle->write_watcher);
-    
-    // clear pending Os fd event
-    udt_consume_osfd(stream->fd);
-    udt_close(stream->udtfd);
-    stream->fd = -1;
-    
-    if (stream->accepted_udtfd != -1) {
-        // clear pending Os fd event
-        udt_consume_osfd(stream->accepted_fd);
-        udt_close(stream->accepted_udtfd);
-        
-        stream->accepted_udtfd = -1;
-  }
-}

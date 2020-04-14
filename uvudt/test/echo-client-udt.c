@@ -11,7 +11,7 @@
 #define CLIENT_MAX_NUM 10
 
 /* Run the benchmark for this many ms */
-#define TIME 20000
+#define TIME 2000
 
 typedef struct {
   int pongs;
@@ -32,8 +32,6 @@ static char PING[] = "PING\n";
 static uv_loop_t* loop;
 
 static buf_t* buf_freelist = NULL;
-static int pinger_shutdown_cb_called;
-static int completed_pingers = 0;
 static int64_t start_time;
 
 
@@ -71,12 +69,10 @@ static void pinger_close_cb(uv_handle_t* handle) {
   printf("ping_pongs: %d roundtrips/s\n", (1000 * pinger->pongs) / TIME);
 
   free(pinger);
-
-  completed_pingers++;
 }
 
 
-static void pinger_write_cb(uv_write_t* req, int status) {
+static void pinger_write_cb(uvudt_write_t* req, int status) {
   assert(status == 0);
 
   free(req);
@@ -84,30 +80,25 @@ static void pinger_write_cb(uv_write_t* req, int status) {
 
 
 static void pinger_write_ping(pinger_t* pinger) {
-  uv_write_t* req;
+  uvudt_write_t* req;
   uv_buf_t buf;
 
   buf.base = (char*)&PING;
   buf.len = strlen(PING);
 
   req = malloc(sizeof *req);
-  if (uv_write(req, (uvudt_t*) &pinger->udt, &buf, 1, pinger_write_cb)) {
-    printf("uv_write failed");
+  if (uvudt_write(req, (uvudt_t*) &pinger->udt, &buf, 1, pinger_write_cb)) {
+    printf("uvudt_write failed");
   }
 }
 
 
 static void pinger_shutdown_cb(uvudt_shutdown_t* req, int status) {
-  ///printf("pinger_shutdown_cb\n");
+  printf("pinger_shutdown_cb\n");
+
+  uvudt_close(req->handle, pinger_close_cb);
 
   assert(status == 0);
-  pinger_shutdown_cb_called++;
-
-  /*
-   * The close callback has not been triggered yet. We must wait for EOF
-   * until we close the connection.
-   */
-  ///assert(completed_pingers == 0);
 }
 
 
@@ -115,22 +106,23 @@ static void pinger_read_cb(uvudt_t* udt, ssize_t nread, uv_buf_t * buf) {
   ssize_t i;
   pinger_t* pinger;
 
-  ///printf("%s.%d,pinger_read_cb,udtfd@%d\n", __FUNCTION__, __LINE__, ((uvudt_t*)udt)->udtfd);
+  ///printf("%s.%d,pinger_read_cb,udtfd@%d, fd@%d\n", __FUNCTION__, __LINE__, udt->udtfd, udt->fd);
 
   pinger = (pinger_t*)udt->data;
 
   if (nread < 0) {
-    ///printf("%s.%d,pinger_read_cb,udtfd@%d\n", __FUNCTION__, __LINE__, ((uvudt_t*)udt)->udtfd);
-    ///assert(uv_last_error(loop).code == UV_EOF);
+    ///printf("%s.%d,pinger_read_cb,udtfd@%d\n", __FUNCTION__, __LINE__, udt->udtfd);
 
     if (buf->base) {
       buf_free(buf);
     }
 
-    ///assert(pinger_shutdown_cb_called == 1);
-    uvudt_close((uv_handle_t*)udt, pinger_close_cb);
+    assert(nread == UV_EOF);
 
     return;
+  } else {
+      buf->base[buf->len-1] = 0;
+      printf("ping reply: %s\n", buf->base);
   }
 
   /* Now we count the pings */
@@ -155,7 +147,8 @@ static void pinger_read_cb(uvudt_t* udt, ssize_t nread, uv_buf_t * buf) {
 static void pinger_connect_cb(uvudt_connect_t* req, int status) {
   pinger_t *pinger = (pinger_t*)req->handle->data;
 
-  ///printf("pinger_connect_cb\n");
+  printf("Connect success\n");
+
   assert(status == 0);
 
   pinger_write_ping(pinger);
@@ -168,8 +161,11 @@ static void pinger_connect_cb(uvudt_connect_t* req, int status) {
 
 static void pinger_new(int port) {
   int r;
-  struct sockaddr_in client_addr; uv_ip4_addr("0.0.0.0", 0, &client_addr);
-  struct sockaddr_in server_addr; uv_ip4_addr("127.0.0.1", port, &server_addr);
+  struct sockaddr_in client_addr; 
+  uv_ip4_addr("0.0.0.0", 0, &client_addr);
+
+  struct sockaddr_in server_addr; 
+  uv_ip4_addr("127.0.0.1", port, &server_addr);
   pinger_t *pinger;
 
   pinger = (pinger_t*)malloc(sizeof(*pinger));

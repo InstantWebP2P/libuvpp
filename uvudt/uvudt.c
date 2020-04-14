@@ -6,7 +6,7 @@
 #include "uvudt.h"
 #include <assert.h>
 
-#define UDT_DEBUG 1
+//#define UDT_DEBUG 1
 
 // consume UDT Os fd event
 static void udt_consume_osfd(int os_fd)
@@ -30,16 +30,13 @@ static int maybe_new_socket(uvudt_t *udt, int domain, int flags)
     // create UDT socket
     if ((udt->udtfd = udt__socket(domain, SOCK_STREAM, 0)) == -1)
     {
-        printf("create sock failed\n");
         return uvudt_translate_udt_error();
     }
 
     // fill Osfd
     if(udt_getsockopt(udt->udtfd, 0, (int)UDT_UDT_OSFD, &udt->fd, &optlen) != 0) {
-        printf("get osfd failed\n");
         return uvudt_translate_udt_error();
     }
-    printf("udtfd: %d, fd: %d\n", udt->udtfd, udt->fd);
 
     // set flags
     udt->flags |= flags;
@@ -67,21 +64,39 @@ int uvudt_init(uv_loop_t *loop, uvudt_t *udt)
 
 int uvudt_close(uvudt_t *udt, uv_close_cb close_cb) {
     int rc = 0;
-    uv_poll_t poll = udt->poll;
+    uv_poll_t *poll = (uv_poll_t *)udt;
 
+    // set closing flag
+    if ((udt->flags & UVUDT_FLAG_CLOSING) || 
+        (udt->flags & UVUDT_FLAG_CLOSED))
+    {
+        goto out;
+    }
+    udt->flags |= UVUDT_FLAG_CLOSING;
+
+    printf("uvudt_closing 1\n");
     // stop uv_poll_t
-    if (uv_poll_stop(&poll)) {
+    if (uv_poll_stop(poll)) {
         rc |= -1;
         goto out;
     }
     // close uv_poll_t
-    uv_close(&poll, close_cb);
+    uv_close(poll, close_cb);
+    printf("uvudt_closing 2\n");
 
-    // close udt
-    if (udt_close(udt->udtfd)) {
-        rc |= -2;
-        goto out;
+    // clear pending Os fd event,then close UDT socket
+    udt_consume_osfd(udt->fd);
+    udt_close(udt->udtfd); udt->udtfd = -1;
+
+    if (udt->accepted_udtfd != -1)
+    {
+        udt_consume_osfd(udt->accepted_fd);
+        udt_close(udt->accepted_udtfd); udt->accepted_udtfd = -1;
     }
+    printf("uvudt_closing 3\n");
+
+    // set closed flag
+    udt->flags |=  UVUDT_FLAG_CLOSED;
 
 out:
     return rc;
@@ -89,7 +104,7 @@ out:
 
 int uvudt_bind(
         uvudt_t *udt,
-        struct sockaddr *addr,
+        const struct sockaddr *addr,
         int reuseaddr,
         int reuseable)
 {
@@ -149,15 +164,12 @@ extern void udt__stream_io(uv_poll_t *handle, int status, int events);
 
  int uvudt_connect(uvudt_connect_t *req,
                    uvudt_t *udt,
-                   struct sockaddr *addr,
+                   const struct sockaddr *addr,
                    uvudt_connect_cb cb)
 {
     int r;
-    uv_poll_t poll = udt->poll;
 
     socklen_t addrlen = (addr->sa_family == AF_INET6) ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
-
-    assert(poll.type == UV_POLL);
 
     if (udt->connect_req)
         return EALREADY;
@@ -193,7 +205,7 @@ extern void udt__stream_io(uv_poll_t *handle, int status, int events);
             }
         }
 
-    req->req.type = UV_CONNECT;
+    req->type = UVUDT_REQ_CONNECT;
     req->cb = cb;
     req->handle = udt;
     QUEUE_INIT(&req->queue);
@@ -287,7 +299,7 @@ out:
 }
 /////////////////////////////////////////////////////////////////////////////////
 
-int uvudt_getsockname(uvudt_t *udt, struct sockaddr *name, int *namelen)
+int uvudt_getsockname(uvudt_t *udt, const struct sockaddr *name, int *namelen)
 {
     int rv = 0;
 
@@ -312,7 +324,7 @@ out:
     return rv;
 }
 
-int uvudt_getpeername(uvudt_t *udt, struct sockaddr *name, int *namelen)
+int uvudt_getpeername(uvudt_t *udt, const struct sockaddr *name, int *namelen)
 {
     int rv = 0;
 
@@ -341,7 +353,7 @@ extern void udt__server_io(uv_poll_t *handle, int status, int events);
 
 int uvudt_listen(uvudt_t *udt, int backlog, uvudt_connection_cb cb)
 {
-    uv_poll_t poll = udt->poll;
+    uv_poll_t *poll = (uv_poll_t *)udt;
 
     if (udt->delayed_error)
         return udt->delayed_error;
@@ -356,23 +368,19 @@ int uvudt_listen(uvudt_t *udt, int backlog, uvudt_connection_cb cb)
 
     // Start listening for connections
     {
-        printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, udt->udtfd, udt->fd);
-
         // init uv_poll_t
-        if (uv_poll_init_socket(udt->aloop, &poll, udt->fd) < 0)
+        if (uv_poll_init_socket(udt->aloop, poll, udt->fd) < 0)
         {
             udt_close(udt->udtfd);
             return -1;
         }
-        printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, udt->udtfd, udt->fd);
 
         // start polling
-        if (uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__server_io) < 0)
+        if (uv_poll_start(poll, UV_READABLE, udt__server_io) < 0)
         {
             udt_close(udt->udtfd);
             return -1;
         }
-        printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, udt->udtfd, udt->fd);
     }
 
     return 0;
@@ -414,7 +422,7 @@ int uvudt_setmbw(uvudt_t *udt, int64_t mbw)
 int uvudt_setmbs(uvudt_t *udt, int32_t mfc, int32_t mudt, int32_t mudp)
 {
     if (udt->udtfd != -1 &&
-        ((mfc != -1 ? udt_setsockopt(udt->udtfd, 0, UDT_UDT_FC, &mfc, sizeof(mfc)) : 0) ||
+        ((mfc  != -1 ? udt_setsockopt(udt->udtfd, 0, UDT_UDT_FC,     &mfc, sizeof(mfc))   : 0) ||
          (mudt != -1 ? udt_setsockopt(udt->udtfd, 0, UDT_UDT_SNDBUF, &mudt, sizeof(mudt)) : 0) ||
          (mudt != -1 ? udt_setsockopt(udt->udtfd, 0, UDT_UDT_RCVBUF, &mudt, sizeof(mudt)) : 0) ||
          (mudp != -1 ? udt_setsockopt(udt->udtfd, 0, UDT_UDP_SNDBUF, &mudp, sizeof(mudp)) : 0) ||
@@ -434,7 +442,7 @@ int uvudt_setsec(uvudt_t *udt, int32_t mode, unsigned char key_buf[], int32_t ke
     return 0;
 }
 
-int uvudt_punchhole(uvudt_t *udt, struct sockaddr * addr, int32_t from, int32_t to)
+int uvudt_punchhole(uvudt_t *udt, const struct sockaddr * addr, int32_t from, int32_t to)
 {
     assert(addr != NULL);
     socklen_t addrlen = (addr->sa_family == AF_INET6) ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
