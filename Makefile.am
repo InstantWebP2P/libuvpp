@@ -62,7 +62,8 @@ libuv_la_SOURCES = src/fs-poll.c \
                    uvudt/UDT4/src/queue.cpp \
                    uvudt/UDT4/src/udtc.cpp \
                    uvudt/UDT4/src/window.cpp \
-                   uvudt/uvudt.c
+                   uvudt/uvudt.c \
+                   uvudt/udtstream.c
 
 if SUNOS
 # Can't be turned into a CC_CHECK_CFLAGS in configure.ac, it makes compilers
