@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+# check docker image for building
+if [ "$(docker images -q uvpp-bld:1.x 2> /dev/null)" == "" ]; then
+  echo "Build Docker image as uvpp-bld:1.x"
+  docker image build --compress -t uvpp-bld:1.x -f ./Dockerfile.bld .
+fi
+
+# create install dir
+mkdir -p appins 
+
+# execute commands 
+if [ $# -ne 0 ]; then
+  echo "$@ ..."
+  docker run -v `pwd`:`pwd` -w `pwd` -i -t \
+  --rm --network host \
+  uvpp-bld:1.x $@
+else
+  echo "Start building ..."
+  docker run -v `pwd`:`pwd` -w `pwd` -i -t \
+  --rm --network host \
+  uvpp-bld:1.x bash -c "mkdir -p build && cd build && cmake .. && make"
+fi

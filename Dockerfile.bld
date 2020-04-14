@@ -1,0 +1,24 @@
+#
+# libuvpp building Dockerfile
+#
+# https://github.com/InstantWebP2P/libuvpp
+# Copyright (c) 2020 Tom Zhou<appnet.link@gmail.com>
+
+# Pull base image.
+FROM ubuntu:18.04
+
+# Install.
+RUN \
+ apt-get -y update && \
+ apt-get install -y cmake g++ gcc
+
+# Add files.
+
+# Set environment variables.
+ENV HOME /root
+
+# Define working directory.
+WORKDIR /data
+
+# Define default command.
+CMD ["bash"]
