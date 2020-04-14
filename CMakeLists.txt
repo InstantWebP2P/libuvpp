@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.4)
-project(libuv LANGUAGES C)
+project(libuv LANGUAGES C CXX)
 
 cmake_policy(SET CMP0057 NEW) # Enable IN_LIST operator
 cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
@@ -16,6 +16,11 @@ set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 90)
+
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
+set(CMAKE_CXX_STANDARD 11)
 
 cmake_dependent_option(LIBUV_BUILD_TESTS
   "Build the unit tests when BUILD_TESTING is enabled and we are the root project" ON
@@ -61,7 +66,23 @@ set(uv_sources
     src/timer.c
     src/uv-common.c
     src/uv-data-getter-setters.c
-    src/version.c)
+    src/version.c
+    uvudt/UDT4/src/api.cpp
+    uvudt/UDT4/src/buffer.cpp
+    uvudt/UDT4/src/cache.cpp
+    uvudt/UDT4/src/ccc.cpp
+    uvudt/UDT4/src/channel.cpp
+    uvudt/UDT4/src/common.cpp
+    uvudt/UDT4/src/udt_core.cpp
+    uvudt/UDT4/src/epoll.cpp
+    uvudt/UDT4/src/list.cpp
+    uvudt/UDT4/src/md5.cpp
+    uvudt/UDT4/src/packet.cpp
+    uvudt/UDT4/src/queue.cpp
+    uvudt/UDT4/src/udtc.cpp
+    uvudt/UDT4/src/window.cpp
+    uvudt/uvudt.c
+    uvudt/udtstream.c)
 
 if(WIN32)
   if (CMAKE_SYSTEM_VERSION VERSION_GREATER 10) # Windows 10
@@ -77,7 +98,7 @@ if(WIN32)
   else()
     message(FATAL_ERROR "Windows Vista is the minimum version supported")
   endif()
-  list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=${windows-version})
+  list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=${windows-version} WIN32 EVPIPE_OSFD=1)
   list(APPEND uv_libraries
        $<$<STREQUAL:${windows-version},0x0600>:psapi>
        iphlpapi
@@ -112,7 +133,7 @@ if(WIN32)
   list(APPEND uv_test_libraries ws2_32)
   list(APPEND uv_test_sources src/win/snprintf.c test/runner-win.c)
 else()
-  list(APPEND uv_defines _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE)
+  list(APPEND uv_defines _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE EVPIPE_OSFD=1)
   if(NOT CMAKE_SYSTEM_NAME MATCHES "Android|OS390")
     # TODO: This should be replaced with find_package(Threads) if possible
     # Android has pthread as part of its c library, not as a separate
@@ -195,7 +216,7 @@ if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
 endif()
 
 if(APPLE)
-  list(APPEND uv_defines _DARWIN_UNLIMITED_SELECT=1 _DARWIN_USE_64_BIT_INODE=1)
+  list(APPEND uv_defines _DARWIN_UNLIMITED_SELECT=1 _DARWIN_USE_64_BIT_INODE=1 DARWIN=1 OSX=1)
   list(APPEND uv_sources
        src/unix/darwin-proctitle.c
        src/unix/darwin.c
@@ -203,7 +224,7 @@ if(APPLE)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112)
+  list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112 LINUX=1)
   list(APPEND uv_libraries dl rt)
   list(APPEND uv_sources
        src/unix/linux-core.c
@@ -283,6 +304,8 @@ target_include_directories(uv
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt/UDT4/src>
   PRIVATE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 target_link_libraries(uv ${uv_libraries})
@@ -294,6 +317,8 @@ target_include_directories(uv_a
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt/UDT4/src>
   PRIVATE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 target_link_libraries(uv_a ${uv_libraries})
@@ -510,6 +535,21 @@ if(LIBUV_BUILD_TESTS)
            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
 
+
+#################################################################### 
+### echo-server-udt
+add_executable(echo-server-udt uvudt/test/echo-server-udt.c)
+target_compile_definitions(echo-server-udt PRIVATE ${uv_defines} USING_UV_SHARED=1)
+target_compile_options(echo-server-udt PRIVATE ${uv_cflags})
+target_link_libraries(echo-server-udt uv)
+
+### echo-client-udt
+add_executable(echo-client-udt uvudt/test/echo-client-udt.c)
+target_compile_definitions(echo-client-udt PRIVATE ${uv_defines} USING_UV_SHARED=1)
+target_compile_options(echo-client-udt PRIVATE ${uv_cflags})
+target_link_libraries(echo-client-udt uv)
+#################################################################### 
+ 
 if(UNIX)
   # Now for some gibbering horrors from beyond the stars...
   foreach(lib IN LISTS uv_libraries)

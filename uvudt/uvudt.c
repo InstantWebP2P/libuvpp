@@ -2,10 +2,11 @@
 // Copyright tom zhou<appnet.link@gmail.com>, 2020
 // UDT4 API in libuv style 
 //////////////////////////////////////////////////////
-
 #include "udtc.h"
 #include "uvudt.h"
+#include <assert.h>
 
+#define UDT_DEBUG 1
 
 // consume UDT Os fd event
 static void udt_consume_osfd(int os_fd)
@@ -19,38 +20,34 @@ static void udt_consume_osfd(int os_fd)
 }
 
 // UDT socket api
-static int new_socket(uvudt_t *udt, int domain, unsigned long flags)
+static int maybe_new_socket(uvudt_t *udt, int domain, int flags)
 {
     int optlen;
-    uv_os_sock_t osfd;
 
     if (udt->udtfd != -1)
         return 0;
 
     // create UDT socket
-    if ((udt->udtfd = uvudt_nonblock(domain, SOCK_STREAM, 0)) == -1)
+    if ((udt->udtfd = udt__socket(domain, SOCK_STREAM, 0)) == -1)
     {
+        printf("create sock failed\n");
         return uvudt_translate_udt_error();
     }
 
     // fill Osfd
-    assert(udt_getsockopt(udt->udtfd, 0, (int)UDT_UDT_OSFD, &osfd, &optlen) == 0);
+    if(udt_getsockopt(udt->udtfd, 0, (int)UDT_UDT_OSFD, &udt->fd, &optlen) != 0) {
+        printf("get osfd failed\n");
+        return uvudt_translate_udt_error();
+    }
+    printf("udtfd: %d, fd: %d\n", udt->udtfd, udt->fd);
+
+    // set flags
+    udt->flags |= flags;
 
     return 0;
 }
 
-static int maybe_new_socket(uvudt_t *udt, int domain, unsigned long flags)
-{
-    if (domain == AF_UNSPEC)
-    {
-        udt->flags |= flags;
-        return 0;
-    }
-
-    return new_socket(udt, domain, flags);
-}
-
-int uvudt_init_ex(uv_loop_t *loop, uvudt_t *udt, unsigned int flags)
+int uvudt_init(uv_loop_t *loop, uvudt_t *udt)
 {
     static int _initialized = 0;
 
@@ -61,44 +58,40 @@ int uvudt_init_ex(uv_loop_t *loop, uvudt_t *udt, unsigned int flags)
         _initialized = 1;
     }
     
-    int domain;
-
-    /* Use the lower 8 bits for the domain */
-    domain = flags & 0xFF;
-    if (domain != AF_INET && domain != AF_INET6 && domain != AF_UNSPEC)
-        return UV_EINVAL;
-
-    if (flags & ~0xFF)
-        return UV_EINVAL;
-
     // early uvudt_t init
-    {
-        udt__stream_init(loop, udt);
-    }
-
-    if (domain != AF_UNSPEC)
-    {
-        int err = maybe_new_socket(udt, domain, 0);
-        if (err)
-        {
-            return err;
-        }
-    }
+    memset(udt, 0, sizeof(*udt));
+    udt__stream_init(loop, udt);
 
     return 0;
 }
 
-int uvudt_init(uv_loop_t *loop, uvudt_t *udt)
-{
-    return uvudt_init_ex(loop, udt, AF_UNSPEC);
+int uvudt_close(uvudt_t *udt, uv_close_cb close_cb) {
+    int rc = 0;
+    uv_poll_t poll = udt->poll;
+
+    // stop uv_poll_t
+    if (uv_poll_stop(&poll)) {
+        rc |= -1;
+        goto out;
+    }
+    // close uv_poll_t
+    uv_close(&poll, close_cb);
+
+    // close udt
+    if (udt_close(udt->udtfd)) {
+        rc |= -2;
+        goto out;
+    }
+
+out:
+    return rc;
 }
- 
- 
+
 int uvudt_bind(
-    uvudt_t *udt,
-    struct sockaddr *addr,
-    int reuseaddr,
-    int reuseable)
+        uvudt_t *udt,
+        struct sockaddr *addr,
+        int reuseaddr,
+        int reuseable)
 {
     int status;
     int optlen;
@@ -117,10 +110,10 @@ int uvudt_bind(
 
     status = -1;
 
-    if (maybe_new_socket(udt, domain, UV_HANDLE_READABLE | UV_HANDLE_WRITABLE))
+    if (maybe_new_socket(udt, domain, UVUDT_FLAG_READABLE | UVUDT_FLAG_WRITABLE))
         return -1;
 
-    assert(udt->udtfd > 0);
+    assert(udt->udtfd != -1);
 
     // check if REUSE ADDR ///////////
     if (reuseaddr >= 0)
@@ -167,11 +160,9 @@ extern void udt__stream_io(uv_poll_t *handle, int status, int events);
     assert(poll.type == UV_POLL);
 
     if (udt->connect_req)
-        return (poll.loop, EALREADY);
+        return EALREADY;
 
-    if (maybe_new_socket(udt,
-                         addr->sa_family,
-                         UV_HANDLE_READABLE | UV_HANDLE_WRITABLE))
+    if (maybe_new_socket(udt, addr->sa_family, UVUDT_FLAG_READABLE | UVUDT_FLAG_WRITABLE))
     {
         return -1;
     }
@@ -208,7 +199,13 @@ extern void udt__stream_io(uv_poll_t *handle, int status, int events);
     QUEUE_INIT(&req->queue);
     udt->connect_req = req;
 
-    uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
+    // start stream
+    if (udt__stream_open(udt, udt->fd, UVUDT_FLAG_READABLE | UVUDT_FLAG_WRITABLE))
+    {
+        udt_close(udt->udtfd);
+        udt->udtfd = -1;
+        return -1;
+    }
 
     return 0;
 }
@@ -240,13 +237,13 @@ int uvudt_bindfd(
         domain = addr.ss_family;
         ////////////////////////////////////////////////////////////////////////
 
-        if ((udt->udtfd = uvudt_nonblock(domain, SOCK_STREAM, 0)) == -1)
+        if ((udt->udtfd = udt_socket(domain, SOCK_STREAM, 0)) == -1)
         {
             goto out;
         }
 
         // fill Osfd
-        assert(udt_getsockopt(udt->udtfd, 0, (int)UDT_UDT_OSFD, &udt->udtfd, &optlen) == 0);
+        assert(udt_getsockopt(udt->udtfd, 0, (int)UDT_UDT_OSFD, &udt->fd, &optlen) == 0);
 
         // check if REUSE ADDR ///////////
         if (reuseaddr >= 0)
@@ -260,10 +257,7 @@ int uvudt_bindfd(
         }
         ///////////////////////////////////
 
-        if (udt__stream_open(
-                (uv_stream_t *)udt,
-                udt->udtfd,
-                UV_HANDLE_READABLE | UV_HANDLE_WRITABLE))
+        if (udt__stream_open(udt, udt->fd, UVUDT_FLAG_READABLE | UVUDT_FLAG_WRITABLE))
         {
             udt_close(udt->udtfd);
             udt->udtfd = -1;
@@ -272,7 +266,7 @@ int uvudt_bindfd(
         }
     }
 
-    assert(udt->udtfd > 0);
+    assert(udt->udtfd != -1);
 
     udt->delayed_error = 0;
     if (udt_bind2(udt->udtfd, udpfd) == -1)
@@ -352,7 +346,7 @@ int uvudt_listen(uvudt_t *udt, int backlog, uvudt_connection_cb cb)
     if (udt->delayed_error)
         return udt->delayed_error;
 
-    if (maybe_new_socket(udt, AF_INET, UV_HANDLE_READABLE))
+    if (maybe_new_socket(udt, AF_INET, UVUDT_FLAG_READABLE | UVUDT_FLAG_WRITABLE))
         return -1;
 
     if (udt_listen(udt->udtfd, backlog) < 0)
@@ -361,38 +355,36 @@ int uvudt_listen(uvudt_t *udt, int backlog, uvudt_connection_cb cb)
     udt->connection_cb = cb;
 
     // Start listening for connections
-    uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__server_io);
+    {
+        printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, udt->udtfd, udt->fd);
+
+        // init uv_poll_t
+        if (uv_poll_init_socket(udt->aloop, &poll, udt->fd) < 0)
+        {
+            udt_close(udt->udtfd);
+            return -1;
+        }
+        printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, udt->udtfd, udt->fd);
+
+        // start polling
+        if (uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__server_io) < 0)
+        {
+            udt_close(udt->udtfd);
+            return -1;
+        }
+        printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, udt->udtfd, udt->fd);
+    }
 
     return 0;
 }
 
 int uvudt_nodelay(uvudt_t *udt, int enable)
 {
-    uv_poll_t poll = udt->poll;
-
-    if (udt->udtfd != -1)
-        return -1;
-
-    if (enable)
-        poll.flags |=  UV_HANDLE_TCP_NODELAY;
-    else
-        poll.flags &= ~UV_HANDLE_TCP_NODELAY;
-
     return 0;
 }
 
 int uvudt_keepalive(uvudt_t *udt, int enable, unsigned int delay)
 {
-    uv_poll_t poll = udt->poll;
-
-    if (udt->udtfd != -1)
-        return -1;
-
-    if (enable)
-        poll.flags |=  UV_HANDLE_TCP_KEEPALIVE;
-    else
-        poll.flags &= ~UV_HANDLE_TCP_KEEPALIVE;
-
     return 0;
 }
 
@@ -603,7 +595,7 @@ int uvudt_translate_udt_error()
 }
 
 // UDT socket operation
-int uvudt_nonblock(int domain, int type, int protocol)
+int udt__socket(int domain, int type, int protocol)
 {
     int udtfd;
     int optval;
@@ -619,6 +611,7 @@ int uvudt_nonblock(int domain, int type, int protocol)
     {
         udt_close(udtfd);
         udtfd = -1;
+        goto out;
     }
 
     /* Set default UDT buffer size */
@@ -631,6 +624,7 @@ int uvudt_nonblock(int domain, int type, int protocol)
     {
         udt_close(udtfd);
         udtfd = -1;
+        goto out;
     }
     optval = 204800;
     if (udt_setsockopt(udtfd, 0, (int)UDT_UDP_SNDBUF, (void *)&optval, sizeof(optval)) |
@@ -638,6 +632,7 @@ int uvudt_nonblock(int domain, int type, int protocol)
     {
         udt_close(udtfd);
         udtfd = -1;
+        goto out;
     }
     optval = 2048000;
     if (udt_setsockopt(udtfd, 0, (int)UDT_UDT_SNDBUF, (void *)&optval, sizeof(optval)) |
@@ -645,6 +640,7 @@ int uvudt_nonblock(int domain, int type, int protocol)
     {
         udt_close(udtfd);
         udtfd = -1;
+        goto out;
     }
     ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -652,21 +648,22 @@ int uvudt_nonblock(int domain, int type, int protocol)
     {
         udt_close(udtfd);
         udtfd = -1;
+        goto out;
     }
 
 out:
     return udtfd;
 }
 
-int udt__accept(int sockfd)
+int udt__accept(int udtfd)
 {
     int peerfd = -1;
     struct sockaddr_storage saddr;
     int namelen = sizeof saddr;
 
-    assert(sockfd >= 0);
+    assert(udtfd != -1);
 
-    if ((peerfd = udt_accept(sockfd, (struct sockaddr *)&saddr, &namelen)) == -1)
+    if ((peerfd = udt_accept(udtfd, (struct sockaddr *)&saddr, &namelen)) == -1)
     {
         return -1;
     }

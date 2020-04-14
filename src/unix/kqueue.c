@@ -145,7 +145,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     w = QUEUE_DATA(q, uv__io_t, watcher_queue);
     assert(w->pevents != 0);
     assert(w->fd >= 0);
-    assert(w->fd < (int) loop->nwatchers);
+    ///assert(w->fd < (int) loop->nwatchers);
+    printf("osfd: %d, nwatch: %d\n", w->fd, loop->nwatchers); 
 
     if ((w->events & POLLIN) == 0 && (w->pevents & POLLIN) != 0) {
       filter = EVFILT_READ;

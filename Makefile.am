@@ -17,8 +17,7 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CPPFLAGS = -I$(top_srcdir)/include \
               -I$(top_srcdir)/src \
               -I$(top_srcdir)/uudt \
-              -I$(top_srcdir)/uvudt/UDT4/src \
-              -DEVPIPE_OSFD
+              -I$(top_srcdir)/uvudt/UDT4/src
 
 include_HEADERS=include/uv.h uvudt/uvudt.h
 

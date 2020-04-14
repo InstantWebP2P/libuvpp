@@ -1,18 +1,7 @@
 
 #include "udtc.h"
 #include "uvudt.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <assert.h>
-#include <errno.h>
-
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/uio.h>
-#include <sys/un.h>
-#include <unistd.h>
 
 
 // consume UDT Os fd event
@@ -25,11 +14,6 @@ static void udt_consume_osfd(uv_os_sock_t os_fd)
 
 	errno = saved_errno;
 }
-
-static void udt__stream_connect(uvudt_t*);
-static void udt__write(uvudt_t* stream);
-static void udt__read(uvudt_t* stream);
-void udt__stream_io(uv_poll_t *handle, int status, int events);
 
 static size_t udt__buf_count(uv_buf_t bufs[], int nbufs)
 {
@@ -44,34 +28,35 @@ static size_t udt__buf_count(uv_buf_t bufs[], int nbufs)
     return total;
 }
 
-void udt__stream_init(uv_loop_t* loop, uvudt_t* stream) {
-    uv_poll_t poll = stream->poll;
+static void udt__stream_connect(uvudt_t *stream);
+static void udt__write(uvudt_t *stream);
+static void udt__read(uvudt_t *stream);
+void udt__stream_io(uv_poll_t *handle, int status, int events);
 
+void udt__stream_init(uv_loop_t* loop, uvudt_t* stream) {
   // hold loop
-  stream->loop = loop;
+  stream->aloop = loop;
 
   stream->alloc_cb = NULL;
-  poll.close_cb = NULL;
   stream->connection_cb = NULL;
   stream->connect_req = NULL;
   stream->shutdown_req = NULL;
   stream->accepted_udtfd = -1;
   stream->udtfd = -1;
+  stream->accepted_udtfd = -1;
   stream->delayed_error = 0;
   QUEUE_INIT(&stream->write_queue);
   QUEUE_INIT(&stream->write_completed_queue);
   stream->write_queue_size = 0;
 }
 
-
 int udt__stream_open(uvudt_t* udt, uv_os_sock_t fd, int flags) {
     uv_poll_t poll = udt->poll;
 
-    assert(fd >= 0);
     udt->fd = fd;
 
     // init uv_poll_t
-    if (uv_poll_init_socket(udt->loop, &poll, fd) < 0)
+    if (uv_poll_init_socket(udt->aloop, &poll, fd) < 0)
     {
         udt_close(udt->udtfd);
         return -1;
@@ -95,10 +80,8 @@ void udt__stream_destroy(uvudt_t* stream) {
   QUEUE *q;
   uv_poll_t poll = stream->poll;
 
-  assert(stream->flags & UV_HANDLE_CLOSED);
 
   if (stream->connect_req) {
-      ///uv__req_unregister(udt->loop, stream->connect_req);
       stream->connect_req->cb(stream->connect_req, -1);
       stream->connect_req = NULL;
   }
@@ -126,7 +109,6 @@ void udt__stream_destroy(uvudt_t* stream) {
       QUEUE_REMOVE(q);
 
       req = QUEUE_DATA(q, uvudt_write_t, queue);
-      ///uv__req_unregister(udt->loop, req);
 
       if (req->cb)
       {
@@ -135,7 +117,6 @@ void udt__stream_destroy(uvudt_t* stream) {
   }
 
   if (stream->shutdown_req) {
-    ///uv__req_unregister(udt->loop, stream->shutdown_req);
     stream->shutdown_req->cb(stream->shutdown_req, UV_ECANCELED);
     stream->shutdown_req = NULL;
   }
@@ -146,33 +127,29 @@ void udt__server_io(uv_poll_t *handle, int status, int events) {
     
     int fd, udtfd, optlen;
     
+    printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, stream->udtfd, stream->fd);
+
+
     assert(handle->type == UV_POLL);
-    assert(!(handle->flags & UV_HANDLE_CLOSING));
+    assert(!(stream->flags & UVUDT_FLAG_CLOSING));
 
     // !!! always consume UDT/OSfd event here
-    if (stream->fd > 0)
+    if (stream->udtfd != -1)
     {
         udt_consume_osfd(stream->fd);
     }
+    printf("line: %d, udtfd: %d, fd: %d\n", __LINE__, stream->udtfd, stream->fd);
 
-    if (uv_poll_start(handle, UV_READABLE | UV_DISCONNECT, udt__server_io) < 0)
-    {
-        udt_close(stream->udtfd);
-        return;
-    }
-    
-    if (stream->accepted_fd > 0)
+    if (stream->accepted_udtfd != -1)
     {
         // stop polling
-        ///udt__io_stop(loop, &stream->read_watcher);
         uv_poll_stop(handle);
         return;
     }
     
-    while (stream->fd != -1) {
-        assert(stream->accepted_udtfd < 0);
-
-    {
+    while (stream->udtfd != -1) {
+        assert(stream->accepted_udtfd == -1);
+    
 		  udtfd = udt__accept(stream->udtfd);
 
 		  if (udtfd < 0) {
@@ -197,14 +174,12 @@ void udt__server_io(uv_poll_t *handle, int status, int events) {
 			  assert(udt_getsockopt(udtfd, 0, (int)UDT_UDT_OSFD, &stream->accepted_fd, &optlen) == 0);
               
               stream->connection_cb(stream, 0);
-			  if (stream->accepted_fd > 0) {
+			  if (stream->accepted_udtfd != -1) {
 				  /* The user hasn't yet accepted called uvudt_accept() */
-				  //udt__io_stop(udt->loop, &stream->read_watcher);
                   uv_poll_stop(handle);
                   return;
 			  }
 		  }
-	  }
   }
 }
 
@@ -212,7 +187,6 @@ void udt__server_io(uv_poll_t *handle, int status, int events) {
 int uvudt_accept(uvudt_t* server, uvudt_t* client) {
   uvudt_t* streamServer;
   uvudt_t* streamClient;
-  int saved_errno;
   int status;
   uv_poll_t srvpoll = server->poll;
   uv_poll_t clnpoll = client->poll;
@@ -220,43 +194,38 @@ int uvudt_accept(uvudt_t* server, uvudt_t* client) {
   /* TODO document this */
   assert(srvpoll.loop == clnpoll.loop);
 
-  saved_errno = errno;
   status = -1;
 
   streamServer = (uvudt_t*)server;
   streamClient = (uvudt_t*)client;
 
-  if (streamServer->accepted_udtfd < 0) {
-    ///udt__set_sys_error(server->loop, EAGAIN);
+  if (streamServer->accepted_udtfd == -1) {
     goto out;
   }
   
   streamClient->udtfd = streamServer->accepted_udtfd;
 
   if (udt__stream_open(streamClient, streamServer->accepted_fd,
-        UV_HANDLE_READABLE | UV_HANDLE_WRITABLE)) {
+        UVUDT_FLAG_READABLE | UVUDT_FLAG_WRITABLE)) {
 	  /* TODO handle error */
       // clear pending Os fd event
       udt_consume_osfd(streamServer->accepted_fd);
-      
       udt_close(streamServer->accepted_udtfd);
-	  
-	  streamServer->accepted_fd = -1;
+
+	  streamServer->accepted_udtfd = -1;
 	  goto out;
   }
 
-  ///udt__io_start(streamServer->loop, &streamServer->read_watcher);
-  if (uv_poll_start(streamServer, UV_READABLE | UV_DISCONNECT, udt__server_io) < 0)
+  if (uv_poll_start(&srvpoll, UV_READABLE | UV_DISCONNECT, udt__server_io) < 0)
   {
       udt_close(streamServer->udtfd);
       goto out;
   }
 
-  streamServer->accepted_fd = -1;
+  streamServer->accepted_udtfd = -1;
   status = 0;
 
 out:
-  errno = saved_errno;
   return status;
 }
 
@@ -288,18 +257,14 @@ static void udt__drain(uvudt_t* stream) {
   assert(!uvudt_write_queue_head(stream));
   assert(stream->write_queue_size == 0);
 
-  ///udt__io_stop(udt->loop, &stream->write_watcher);
-
-
   /* Shutdown? */
-  if ((stream->flags & UV_HANDLE_SHUTTING) &&
-      !(stream->flags & UV_HANDLE_CLOSING) &&
-      !(stream->flags & UV_HANDLE_SHUT)) {
+  if (( stream->flags & UVUDT_FLAG_SHUTTING) &&
+      !(stream->flags & UVUDT_FLAG_CLOSING) &&
+      !(stream->flags & UVUDT_FLAG_SHUT)) {
     assert(stream->shutdown_req);
 
     req = stream->shutdown_req;
     stream->shutdown_req = NULL;
-    ///uv__req_unregister(udt->loop, req);
 
     // UDT don't need drain
     {
@@ -308,13 +273,11 @@ static void udt__drain(uvudt_t* stream) {
 
     	if (udt_close(stream->udtfd)) {
     		/* Error. Report it. User should call uv_close(). */
-    		///udt__set_sys_error(udt->loop, uvudt_translate_udt_error());
     		if (req->cb) {
     			req->cb(req, -1);
     		}
     	} else {
-    		///udt__set_sys_error(udt->loop, 0);
-    		((uv_handle_t*) stream)->flags |= UV_HANDLE_SHUT;
+    		stream->flags |= UVUDT_FLAG_SHUT;
     		if (req->cb) {
     			req->cb(req, 0);
     		}
@@ -362,13 +325,13 @@ static void udt__write_req_finish(uvudt_write_t* req) {
  */
 static void udt__write(uvudt_t* stream) {
   uvudt_write_t* req;
-  struct iovec* iov;
+  uv_buf_t *iov;
   int iovcnt;
   ssize_t n;
   uv_poll_t poll = stream->poll;
 
 
-  if (stream->flags & UV_HANDLE_CLOSING) {
+  if (poll.flags & UVUDT_FLAG_CLOSING) {
     /* Handle was closed this tick. We've received a stale
      * 'is writable' callback from the event loop, ignore.
      */
@@ -377,7 +340,7 @@ static void udt__write(uvudt_t* stream) {
 
 start:
 
-  assert(stream->udtfd > 0);
+  assert(stream->udtfd != -1);
 
   /* Get the request at the head of the queue. */
   req = uvudt_write_queue_head(stream);
@@ -388,25 +351,16 @@ start:
 
   assert(req->handle == stream);
 
-  /*
-   * Cast to iovec. We had to have our own uv_buf_t instead of iovec
-   * because Windows's WSABUF is not an iovec.
-   */
-  assert(sizeof(uv_buf_t) == sizeof(struct iovec));
-  iov = (struct iovec*) &(req->bufs[req->write_index]);
+  iov = &(req->bufs[req->write_index]);
   iovcnt = req->nbufs - req->write_index;
 
-  /*
-   * Now do the actual writev. Note that we've been updating the pointers
-   * inside the iov each time we write. So there is no need to offset it.
-   */
 	  {
 		  int next = 1, it = 0;
 		  n = -1;
 		  for (it = 0; it < iovcnt; it ++) {
 			  size_t ilen = 0;
-			  while (ilen < iov[it].iov_len) {
-				  int rc = udt_send(stream->udtfd, ((char *)iov[it].iov_base)+ilen, iov[it].iov_len-ilen, 0);
+			  while (ilen < iov[it].len) {
+				  int rc = udt_send(stream->udtfd, ((char *)iov[it].base)+ilen, iov[it].len-ilen, 0);
 				  if (rc < 0) {
 					  next = 0;
 					  break;
@@ -421,19 +375,13 @@ start:
 	  }
 
   if (n < 0) {
-		  //static int wcnt = 0;
-		  //fprintf(stdout, "func:%s, line:%d, rcnt: %d\n", __FUNCTION__, __LINE__, wcnt ++);
-
-		  if (udt_getlasterror_code() != UDT_EASYNCSND) {
-			  /* Error */
-			  req->error = uvudt_translate_udt_error();
-			  stream->write_queue_size -= udt__write_req_size(req);
-			  udt__write_req_finish(req);
-			  return;
-		  } else if (stream->flags & UV_HANDLE_BLOCKING_WRITES) {
-			  /* If this is a blocking stream, try again. */
-			  goto start;
-		  }
+      if (udt_getlasterror_code() != UDT_EASYNCSND) {
+          /* Error */
+          req->error = uvudt_translate_udt_error();
+          stream->write_queue_size -= udt__write_req_size(req);
+          udt__write_req_finish(req);
+          return;
+       }
   } else {
     /* Successful write */
 
@@ -449,19 +397,9 @@ start:
         buf->len -= n;
         stream->write_queue_size -= n;
         n = 0;
-
-        /* There is more to write. */
-        if (stream->flags & UV_HANDLE_BLOCKING_WRITES) {
-          /*
-           * If we're blocking then we should not be enabling the write
-           * watcher - instead we need to try again.
-           */
-          goto start;
-        } else {
-          /* Break loop and ensure the watcher is pending. */
-          break;
-        }
-
+        
+        /* Break loop and ensure the watcher is pending. */
+        break;
       } else {
         /* Finished writing the buf at index req->write_index. */
         req->write_index++;
@@ -486,11 +424,7 @@ start:
   /* Either we've counted n down to zero or we've got EAGAIN. */
   assert(n == 0 || n == -1);
 
-  /* Only non-blocking streams should use the write_watcher. */
-  assert(!(stream->flags & UV_HANDLE_BLOCKING_WRITES));
-
   /* We're not done. */
-  ///udt__io_start(udt->loop, &stream->write_watcher);
   uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
 }
 
@@ -504,11 +438,9 @@ static void udt__write_callbacks(uvudt_t* stream) {
     q = QUEUE_HEAD(&stream->write_completed_queue);
     req = QUEUE_DATA(q, uvudt_write_t, queue);
     QUEUE_REMOVE(q);
-    ///uv__req_unregister(udt->loop, req);
 
     /* NOTE: call callback AFTER freeing the request data. */
     if (req->cb) {
-      ///udt__set_sys_error(udt->loop, req->error);
       req->cb(req, req->error ? -1 : 0);
     }
   }
@@ -537,11 +469,11 @@ static void udt__read(uvudt_t* stream) {
    */
   count = 32;
 
-  /* XXX: Maybe instead of having UV_HANDLE_READING we just test if
+  /* XXX: Maybe instead of having UVUDT_FLAG_READABLE we just test if
    * tcp->read_cb is NULL or not?
    */
   while ((stream->read_cb)
-      && (stream->flags & UV_HANDLE_READING)
+      && (stream->flags & UVUDT_FLAG_READABLE)
       && (count-- > 0)) {
     assert(stream->alloc_cb);
     
@@ -555,7 +487,7 @@ static void udt__read(uvudt_t* stream) {
     }
     assert(buf.base != NULL);
 
-    assert(stream->udtfd > 0);
+    assert(stream->udtfd != -1);
 
     // udt recv
     {
@@ -577,7 +509,7 @@ static void udt__read(uvudt_t* stream) {
 
     		if (udterr == EAGAIN) {
     			/* Wait for the next one. */
-    			if (stream->flags & UV_HANDLE_READING) {
+    			if (stream->flags & UVUDT_FLAG_READABLE) {
     				///udt__io_start(udt->loop, &stream->read_watcher);
                     uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
                 }
@@ -659,25 +591,22 @@ int uvudt_shutdown(uvudt_shutdown_t* req, uvudt_t* stream, uvudt_shutdown_cb cb)
 
   assert((poll.type == UV_POLL) &&
          "uvudt_shutdown (unix) only supports uv_handle_t right now");
-  assert(stream->udtfd > 0);
+  assert(stream->udtfd != -1);
 
-  if (!(stream->flags & UV_HANDLE_WRITABLE) ||
-      stream->flags & UV_HANDLE_SHUT ||
-      stream->flags & UV_HANDLE_CLOSED ||
-      stream->flags & UV_HANDLE_CLOSING) {
-    ///udt__set_artificial_error(udt->loop, UV_ENOTCONN);
+  if (!(stream->flags & UVUDT_FLAG_WRITABLE) ||
+        stream->flags & UVUDT_FLAG_SHUT ||
+        stream->flags & UVUDT_FLAG_CLOSED ||
+        stream->flags & UVUDT_FLAG_CLOSING) {
     return -1;
   }
 
   /* Initialize request */
-  ///udt__req_init(udt->loop, req, UV_SHUTDOWN);
   req->req.type = UV_SHUTDOWN;
   req->handle = stream;
   req->cb = cb;
   stream->shutdown_req = req;
-  stream->flags |= UV_HANDLE_SHUTTING;
+  stream->flags |= UVUDT_FLAG_SHUTTING;
 
-  ///udt__io_start(udt->loop, &stream->write_watcher);
   uv_poll_start(&poll, UV_READABLE | UV_DISCONNECT, udt__stream_io);
 
   return 0;
@@ -687,10 +616,10 @@ void udt__stream_io(uv_poll_t * handle, int status, int events) {
     uvudt_t *stream = (uvudt_t *)handle;
 
     assert(handle->type == UV_POLL);
-    assert(stream->fd > 0);
+    assert(stream->udtfd != -1);
 
     // !!! always consume UDT/OSfd event here
-    if (stream->fd > 0)
+    if (stream->udtfd != -1)
     {
         udt_consume_osfd(stream->fd);
     }
@@ -742,9 +671,8 @@ static void udt__stream_connect(uvudt_t* stream) {
     stream->delayed_error = 0;
   } else {
 	  /* Normal situation: we need to get the socket error from the kernel. */
-	  assert(stream->udtfd > 0);
+	  assert(stream->udtfd != -1);
       
-      {
 		  // notes: check socket state until connect successfully
 		  switch (udt_getsockstate(stream->udtfd)) {
 		  case UDT_CONNECTED:
@@ -761,14 +689,12 @@ static void udt__stream_connect(uvudt_t* stream) {
 			  ///udt_consume_osfd(stream->fd);
 			  break;
 		  }
-	  }
   }
 
   if (error == EINPROGRESS)
     return;
 
   stream->connect_req = NULL;
-  ///uv__req_unregister(udt->loop, req);
 
   if (req->cb) {
     //////udt__set_sys_error(udt->loop, error);
@@ -802,7 +728,7 @@ int uvudt_write(uvudt_write_t *req, uvudt_t *stream, const uv_buf_t bufs[], unsi
     QUEUE_INIT(&req->queue);
 
     req->bufs = req->bufsml;
-    if (nbufs > ARRAY_SIZE(req->bufsml))
+    if (nbufs > (sizeof(req->bufsml)/sizeof(req->bufsml[0])))
         req->bufs = malloc(nbufs * sizeof(bufs[0]));
 
     if (req->bufs == NULL)
@@ -855,22 +781,22 @@ int uvudt_read_start(uvudt_t *stream, uv_alloc_cb alloc_cb,
 
     assert(poll.type == UV_POLL);
 
-    if (stream->flags & UV_HANDLE_CLOSING)
+    if (poll.flags & UVUDT_FLAG_CLOSING)
     {
         //////udt__set_sys_error(udt->loop, EINVAL);
         return -1;
     }
     
-    /* The UV_HANDLE_READING flag is irrelevant of the state of the tcp - it just
+    /* The UVUDT_FLAG_READABLE flag is irrelevant of the state of the tcp - it just
    * expresses the desired state of the user.
    */
-    stream->flags |= UV_HANDLE_READING;
+    stream->flags |= UVUDT_FLAG_READABLE;
 
     /* TODO: try to do the read inline? */
     /* TODO: keep track of tcp state. If we've gotten a EOF then we should
    * not start the IO watcher.
    */
-    assert(stream->udtfd > 0);
+    assert(stream->udtfd != -1);
     assert(alloc_cb);
 
     stream->read_cb = read_cb;
@@ -892,7 +818,7 @@ int uvudt_read_stop(uvudt_t* stream) {
   uv_poll_t poll = stream->poll;
   uv_poll_stop(&poll);
 
-  stream->flags &= ~UV_HANDLE_READING;
+  stream->flags &= ~UVUDT_FLAG_READABLE;
   stream->read_cb = NULL;
   stream->alloc_cb = NULL;
   return 0;
@@ -902,14 +828,14 @@ int uvudt_read_stop(uvudt_t* stream) {
 int uvudt_is_readable(uvudt_t* stream) {
     uv_poll_t poll = stream->poll;
 
-    return stream->flags & UV_HANDLE_READABLE;
+    return stream->flags & UVUDT_FLAG_READABLE;
 }
 
 
 int uvudt_is_writable(uvudt_t* stream) {
     uv_poll_t poll = stream->poll;
 
-    return stream->flags & UV_HANDLE_WRITABLE;
+    return stream->flags & UVUDT_FLAG_WRITABLE;
 }
 
 
@@ -924,11 +850,11 @@ void udt__stream_close(uvudt_t* stream) {
     udt_close(stream->udtfd);
     stream->fd = -1;
     
-    if (stream->accepted_fd > 0) {
+    if (stream->accepted_udtfd != -1) {
         // clear pending Os fd event
         udt_consume_osfd(stream->accepted_fd);
         udt_close(stream->accepted_udtfd);
         
-        stream->accepted_fd = -1;
+        stream->accepted_udtfd = -1;
   }
 }
