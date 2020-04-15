@@ -1,0 +1,23 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-18.04
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: cmake
+      run: apt-get -y update && apt-get install -y cmake
+    - name: configure
+      run: mkdir -p build && cmake -B./build -H. -DBUILD_TESTING=ON
+    - name: make
+      run: cmake --build build
+    - name: test
+      run: build/uv_run_tests
