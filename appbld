@@ -19,5 +19,7 @@ else
   echo "Start building ..."
   docker run -v `pwd`:`pwd` -w `pwd` -i -t \
   --rm --network host \
-  uvpp-bld:1.x bash -c "mkdir -p build && cmake -B./build -H. && make -C ./build"
+  uvpp-bld:1.x bash -c "mkdir -p build && \
+  cmake -B./build -H. -DCMAKE_INSTALL_PREFIX=./appins && \
+  make -C ./build && make -C ./build install"
 fi
