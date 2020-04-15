@@ -14,6 +14,7 @@
 #define TIME 2000
 
 typedef struct {
+  int domain;    
   int pongs;
   int state;
   uvudt_t udt;
@@ -66,7 +67,7 @@ static void pinger_close_cb(uv_handle_t* handle) {
   pinger_t* pinger;
 
   pinger = (pinger_t*)handle->data;
-  printf("ping_pongs: %d roundtrips/s\n", (1000 * pinger->pongs) / TIME);
+  printf("ping_pongs: %d roundtrips/s in ip%d\n", (1000 * pinger->pongs) / TIME, pinger->domain);
 
   free(pinger);
 }
@@ -94,8 +95,6 @@ static void pinger_write_ping(pinger_t* pinger) {
 
 
 static void pinger_shutdown_cb(uvudt_shutdown_t* req, int status) {
-  printf("pinger_shutdown_cb\n");
-
   uvudt_close(req->handle, pinger_close_cb);
 
   assert(status == 0);
@@ -106,13 +105,10 @@ static void pinger_read_cb(uvudt_t* udt, ssize_t nread, uv_buf_t * buf) {
   ssize_t i;
   pinger_t* pinger;
 
-  ///printf("%s.%d,pinger_read_cb,udtfd@%d, fd@%d\n", __FUNCTION__, __LINE__, udt->udtfd, udt->fd);
 
-  pinger = (pinger_t*)udt->data;
+  pinger = (pinger_t*)udt->poll.data;
 
   if (nread < 0) {
-    ///printf("%s.%d,pinger_read_cb,udtfd@%d\n", __FUNCTION__, __LINE__, udt->udtfd);
-
     if (buf->base) {
       buf_free(buf);
     }
@@ -120,9 +116,6 @@ static void pinger_read_cb(uvudt_t* udt, ssize_t nread, uv_buf_t * buf) {
     assert(nread == UV_EOF);
 
     return;
-  } else {
-      buf->base[buf->len-1] = 0;
-      printf("ping reply: %s\n", buf->base);
   }
 
   /* Now we count the pings */
@@ -145,7 +138,7 @@ static void pinger_read_cb(uvudt_t* udt, ssize_t nread, uv_buf_t * buf) {
 
 
 static void pinger_connect_cb(uvudt_connect_t* req, int status) {
-  pinger_t *pinger = (pinger_t*)req->handle->data;
+  pinger_t *pinger = (pinger_t*)req->handle->poll.data;
 
   printf("Connect success\n");
 
@@ -169,6 +162,7 @@ static void pinger_new(int port) {
   pinger_t *pinger;
 
   pinger = (pinger_t*)malloc(sizeof(*pinger));
+  pinger->domain= 4;
   pinger->state = 0;
   pinger->pongs = 0;
 
@@ -176,7 +170,7 @@ static void pinger_new(int port) {
   r = uvudt_init(loop, &pinger->udt);
   assert(!r);
 
-  pinger->udt.data = pinger;
+  pinger->udt.poll.data = pinger;
 
   uvudt_bind(&pinger->udt, &client_addr, 1, 1);
 
@@ -188,13 +182,14 @@ static void pinger_new6(int port)
 {
     int r;
     struct sockaddr_in6 client_addr;
-    uv_ip4_addr("::", 0, &client_addr);
+    uv_ip6_addr("::", 0, &client_addr);
 
     struct sockaddr_in6 server_addr;
-    uv_ip4_addr("::1", port, &server_addr);
+    uv_ip6_addr("::1", port, &server_addr);
     pinger_t *pinger;
 
     pinger = (pinger_t *)malloc(sizeof(*pinger));
+    pinger->domain= 6;
     pinger->state = 0;
     pinger->pongs = 0;
 
@@ -202,7 +197,7 @@ static void pinger_new6(int port)
     r = uvudt_init(loop, &pinger->udt);
     assert(!r);
 
-    pinger->udt.data = pinger;
+    pinger->udt.poll.data = pinger;
 
     uvudt_bind(&pinger->udt, &client_addr, 1, 1);
 
@@ -235,8 +230,10 @@ int main(int argc, char * argv [])
 	clnNum = (clnNum < CLIENT_MAX_NUM)? clnNum : CLIENT_MAX_NUM;
 	
 	for (i = 0; i < srvNum; i++)
-		for (j = 0; j < clnNum; j++)
-		    pinger_new(port+i);
+		for (j = 0; j < clnNum; j++) {
+            pinger_new(port+i);
+            pinger_new6(port+i);
+        }
 
     uv_run(loop, UV_RUN_DEFAULT);
 

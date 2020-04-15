@@ -33,11 +33,8 @@ struct uvudt_s
 {
     // inherit from uv_poll_t
     uv_poll_t poll;
-    // inherit from uv_handle_t
-    int flags;
     uv_loop_t *aloop;
-    // user own data
-    void *data;
+    int flags;
 
     // uv_stream_t compatibile fields
     size_t write_queue_size;

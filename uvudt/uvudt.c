@@ -74,7 +74,6 @@ int uvudt_close(uvudt_t *udt, uv_close_cb close_cb) {
     }
     udt->flags |= UVUDT_FLAG_CLOSING;
 
-    printf("uvudt_closing 1\n");
     // stop uv_poll_t
     if (uv_poll_stop(poll)) {
         rc |= -1;
@@ -82,7 +81,6 @@ int uvudt_close(uvudt_t *udt, uv_close_cb close_cb) {
     }
     // close uv_poll_t
     uv_close(poll, close_cb);
-    printf("uvudt_closing 2\n");
 
     // clear pending Os fd event,then close UDT socket
     udt_consume_osfd(udt->fd);
@@ -93,7 +91,6 @@ int uvudt_close(uvudt_t *udt, uv_close_cb close_cb) {
         udt_consume_osfd(udt->accepted_fd);
         udt_close(udt->accepted_udtfd); udt->accepted_udtfd = -1;
     }
-    printf("uvudt_closing 3\n");
 
     // set closed flag
     udt->flags |=  UVUDT_FLAG_CLOSED;

@@ -119,7 +119,7 @@ static void on_connection(uvudt_t* server, int status) {
     assert(r == 0);
 
   /* associate server with stream */
-  stream->data = server;
+  stream->poll.data = server;
 
   r = uvudt_accept(server, stream);
   assert(r == 0);
@@ -207,8 +207,8 @@ int main(int argc, char *argv[]) {
   if (udt4_echo_start(TEST_PORT))
     return 1;
 
-  ///if (udt6_echo_start(TEST_PORT))
-  ///    return 1;
+  if (udt6_echo_start(TEST_PORT))
+    return 1;
 
   uv_run(loop, UV_RUN_DEFAULT);
   return 0;
