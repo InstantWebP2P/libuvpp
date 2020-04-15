@@ -1,7 +1,8 @@
 //////////////////////////////////////////////////////
-// Copyright tom zhou<appnet.link@gmail.com>, 2020
-// UDT4 API in libuv style 
+// UDT4 interfaces implementaion
+// Copyright 2020, tom zhou<appnet.link@gmail.com>
 //////////////////////////////////////////////////////
+
 #include "udtc.h"
 #include "uvudt.h"
 #include <assert.h>
