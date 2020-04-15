@@ -976,7 +976,7 @@ void CRcvQueue::init(int qsize, int payload, int version, int hsize, CChannel* c
         throw CUDTException(3, 1);
     }
 
-#ifndef OSX
+#if !defined(OSX) && !defined(DARWIN)
     pthread_setname_np(m_WorkerThread, "UDT.CRcvQueue");
 #endif
 
@@ -997,7 +997,7 @@ void CRcvQueue::init(int qsize, int payload, int version, int hsize, CChannel* c
    DWORD WINAPI CRcvQueue::worker(LPVOID param)
 #endif
 {
-#ifdef OSX
+#if defined(OSX) || defined(DARWIN)
     pthread_setname_np("UDT.CRcvQueue");
 #endif
 
