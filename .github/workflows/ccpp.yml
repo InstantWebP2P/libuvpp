@@ -2,9 +2,9 @@ name: C/C++ CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ v1.x-udt ]
   pull_request:
-    branches: [ master ]
+    branches: [ v1.x-udt ]
 
 jobs:
   build:
