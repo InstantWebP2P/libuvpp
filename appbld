@@ -19,5 +19,5 @@ else
   echo "Start building ..."
   docker run -v `pwd`:`pwd` -w `pwd` -i -t \
   --rm --network host \
-  uvpp-bld:1.x bash -c "mkdir -p build && cd build && cmake .. && make"
+  uvpp-bld:1.x bash -c "mkdir -p build && cmake -B./build -H. && make -C ./build"
 fi
