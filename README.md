@@ -11,7 +11,7 @@ used by [Luvit](http://luvit.io/), [Julia](http://julialang.org/),
 
  * Full-featured event loop backed by epoll, kqueue, IOCP, event ports.
 
- * Asynchronous TCP and UDP sockets
+ * Asynchronous TCP, UDT and UDP sockets
 
  * Asynchronous DNS resolution
 
