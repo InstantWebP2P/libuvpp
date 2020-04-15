@@ -98,7 +98,7 @@ if(WIN32)
   else()
     message(FATAL_ERROR "Windows Vista is the minimum version supported")
   endif()
-  list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=${windows-version} WIN32 EVPIPE_OSFD=1)
+  list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=${windows-version} WIN32)
   list(APPEND uv_libraries
        $<$<STREQUAL:${windows-version},0x0600>:psapi>
        iphlpapi
@@ -133,7 +133,7 @@ if(WIN32)
   list(APPEND uv_test_libraries ws2_32)
   list(APPEND uv_test_sources src/win/snprintf.c test/runner-win.c)
 else()
-  list(APPEND uv_defines _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE EVPIPE_OSFD=1)
+  list(APPEND uv_defines _FILE_OFFSET_BITS=64 _LARGEFILE_SOURCE)
   if(NOT CMAKE_SYSTEM_NAME MATCHES "Android|OS390")
     # TODO: This should be replaced with find_package(Threads) if possible
     # Android has pthread as part of its c library, not as a separate

@@ -157,7 +157,6 @@ enum UDTOpt
                     // for example, integrate UDT socket event mechanism to epoll.
                     // notes: OSFD just notify some event happened, please use getting UDT_EVENT option
                     // to retrieve the real read/write/error event state.
-                    // to enable this function, please add -DEVPIPE_OSFD in compile flag.
                     // to get this option, please pass os-specific socket definitions, for example,
                     // in Linux pass int, while in windows pass SOCKET
     UDT_QOS,        // UDT socket Qos/priority

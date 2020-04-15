@@ -496,10 +496,8 @@ int CUDTUnited::newConnection(const UDTSOCKET listen, const sockaddr* peer, CHan
 
    CTimer::triggerEvent();
 
-#ifdef EVPIPE_OSFD
    // trigger event pipe
    ls->m_pUDT->feedOsfd();
-#endif
 
 ERR_ROLLBACK:
    if (error > 0)
@@ -981,12 +979,10 @@ int CUDTUnited::close(const UDTSOCKET u)
       return 0;
    }
 
-#ifdef EVPIPE_OSFD
    // trigger event pipe to notify closing
    ///printf("%s.%s.%d, trigger Closing...", __FILE__, __FUNCTION__, __LINE__);
    s->m_pUDT->feedOsfd();
    ///printf("done\n");
-#endif
 
    ///printf("%s.%s.%d\n", __FILE__, __FUNCTION__, __LINE__);
    CGuard socket_cg(s->m_ControlLock);
@@ -1037,12 +1033,10 @@ int CUDTUnited::close(const UDTSOCKET u)
 
    CTimer::triggerEvent();
 
-#ifdef EVPIPE_OSFD
    // trigger event pipe to notify closing
    ///printf("%s.%s.%d, trigger Closing...", __FILE__, __FUNCTION__, __LINE__);
    ///s->m_pUDT->feedOsfd();
    ///printf("done\n");
-#endif
 
    return 0;
 }

@@ -860,10 +860,9 @@ void CRendezvousQueue::updateConnStatus()
             i->m_pUDT->m_bConnecting = false;
             CUDT::s_UDTUnited.m_EPoll.update_events(i->m_iID, i->m_pUDT->m_sPollID, UDT_EPOLL_ERR, true);
 
-#ifdef EVPIPE_OSFD
             // trigger event pipe
             i->m_pUDT->feedOsfd();
-#endif
+            
             continue;
          }
 

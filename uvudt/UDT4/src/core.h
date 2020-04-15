@@ -468,8 +468,6 @@ private: // for epoll
    void removeEPoll(const int eid);
 
    // for async OS event mechanism
-#ifdef EVPIPE_OSFD
-
 private:
    // event pipe used to integrate UDT to another existing event loop
    SYSSOCKET m_evPipe[2];
@@ -479,9 +477,6 @@ public:
    // notes: trigger event by read->write Os fd with dummy byte
    SYSSOCKET getOsfd();
    int      feedOsfd();
-
-#endif
-
 };
 
 #endif
