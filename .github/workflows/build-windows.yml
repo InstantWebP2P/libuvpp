@@ -2,9 +2,9 @@ name: build-windows
 
 on:
   push:
-    branches: [ v12.x-httpp ]
+    branches: [ v1.x-udt ]
   pull_request:
-    branches: [ v12.x-httpp ]
+    branches: [ v1.x-udt ]
 
 env:
   PYTHON_VERSION: 2.7
