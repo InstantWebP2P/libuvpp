@@ -1,0 +1,4 @@
+[submodule "uvudt"]
+	path = uvudt
+	url = https://github.com/instantwebp2p/uvudt
+	branch = master
