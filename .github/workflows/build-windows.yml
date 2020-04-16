@@ -1,0 +1,36 @@
+name: build-windows
+
+on:
+  push:
+    branches: [ v12.x-httpp ]
+  pull_request:
+    branches: [ v12.x-httpp ]
+
+env:
+  PYTHON_VERSION: 2.7
+  FLAKY_TESTS: dontcare
+
+jobs:
+  build-windows:
+    runs-on: windows-2016
+    steps:
+      - uses: actions/checkout@v2
+      - name: Checkout submodules
+        uses: srt32/git-actions@v0.0.3
+        with:
+         args: git submodule update --init --recursive        
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install deps
+        run: choco install nasm
+      - name: Environment Information
+        run: npx envinfo
+      - name: configure
+        run: mkdir -p build && cmake -B./build -H. -DBUILD_TESTING=ON
+      - name: make
+        run: cmake --build build
+      - name: test
+        run: build/uv_run_tests
+
