@@ -98,7 +98,7 @@ if(WIN32)
   else()
     message(FATAL_ERROR "Windows Vista is the minimum version supported")
   endif()
-  list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=${windows-version} WIN32)
+  list(APPEND uv_defines WIN32_LEAN_AND_MEAN _WIN32_WINNT=${windows-version} WIN32 UDT_EXPORTS)
   list(APPEND uv_libraries
        $<$<STREQUAL:${windows-version},0x0600>:psapi>
        iphlpapi
