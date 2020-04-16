@@ -9,20 +9,20 @@
 #include "uv.h"
 #include "udtqueue.h"
 
-// data type declare
+// request type
 struct uvudt_connect_s;
 struct uvudt_shutdown_s;
 struct uvudt_write_s;
 struct uvudt_s;
 
-// callback declare
+// callback
 typedef void (* uvudt_connect_cb)(struct uvudt_connect_s *req, int status);
 typedef void (* uvudt_shutdown_cb)(struct uvudt_shutdown_s *req, int status);
 typedef void (* uvudt_write_cb)(struct uvudt_write_s *req, int status);
 typedef void (* uvudt_read_cb)(struct uvudt_s *stream, ssize_t nread, const uv_buf_t *buf);
 typedef void (* uvudt_connection_cb)(struct uvudt_s *server, int status);
 
-//
+// state flags
 enum uvudt_flags_t
 {
     UVUDT_FLAG_READABLE = 0x01,
@@ -77,6 +77,7 @@ struct uvudt_connect_s
     int type;
     int error;
     uvudt_t *handle;
+    void *data;
 
     void *queue[2];
 
@@ -89,6 +90,7 @@ struct uvudt_shutdown_s {
     int type;
     int error;
     uvudt_t *handle;
+    void *data;
 
     uvudt_shutdown_cb cb;
 };
@@ -99,6 +101,7 @@ struct uvudt_write_s {
     int type;
     int error;
     uvudt_t *handle;
+    void *data;
 
     void *queue[2];
     unsigned int write_index;

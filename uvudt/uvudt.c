@@ -75,13 +75,15 @@ int uvudt_close(uvudt_t *udt, uv_close_cb close_cb) {
     }
     udt->flags |= UVUDT_FLAG_CLOSING;
 
-    // stop uv_poll_t
-    if (uv_poll_stop(poll)) {
+    if (!uv_is_closing(poll)) {
+      // stop uv_poll_t
+      if (uv_poll_stop(poll)) {
         rc |= -1;
         goto out;
+       }
+       // close uv_poll_t
+       uv_close(poll, close_cb);
     }
-    // close uv_poll_t
-    uv_close(poll, close_cb);
 
     // clear pending Os fd event,then close UDT socket
     udt_consume_osfd(udt->fd);
