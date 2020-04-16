@@ -26,7 +26,7 @@ jobs:
       - name: Environment Information
         run: npx envinfo
       - name: configure
-        run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON
+        run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_VERSION=6.1 -DCMAKE_C_COMPILER=i686-w64-mingw32-gcc
       - name: make
         run: cmake --build build
       - name: test
