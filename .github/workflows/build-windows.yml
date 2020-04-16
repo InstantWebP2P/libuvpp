@@ -17,14 +17,6 @@ jobs:
       - uses: actions/checkout@v2
       - name: Checkout submodules
         run: git submodule update --init
-      - name: Set up Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v1
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Install deps
-        run: choco install nasm
-      - name: Environment Information
-        run: npx envinfo
       - name: configure
         run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_VERSION=6.1 -DCMAKE_C_COMPILER=i686-w64-mingw32-gcc
       - name: make
