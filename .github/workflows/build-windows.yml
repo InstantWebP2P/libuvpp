@@ -20,7 +20,7 @@ jobs:
       - name: configure
         run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=i686-w64-mingw32-gcc
       - name: make
-        run: cmake --build build
+        run: make -C build V=1
       - name: test
         run: build/uv_run_tests
 
