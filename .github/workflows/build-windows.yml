@@ -18,7 +18,7 @@ jobs:
       - name: Checkout submodules
         run: git submodule update --init
       - name: configure
-        run: mkdir -p build && cmake -B ./build -H . -DBUILD_TESTING=ON -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_VERSION=6.1 -DCMAKE_C_COMPILER=i686-w64-mingw32-gcc
+        run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=i686-w64-mingw32-gcc
       - name: make
         run: cmake --build build
       - name: test
