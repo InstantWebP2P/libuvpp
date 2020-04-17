@@ -18,7 +18,7 @@ jobs:
       - name: Checkout submodules
         run: git submodule update --init
       - name: configure
-        run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON -DCMAKE_C_COMPILER=i686-w64-mingw32-gcc
+        run: mkdir -p build && cmake -B ./build -S . -DBUILD_TESTING=ON -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON
       - name: make
         run: cmake --build build
       - name: test
