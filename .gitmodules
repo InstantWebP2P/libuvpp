@@ -2,3 +2,6 @@
 	path = uvudt
 	url = https://github.com/instantwebp2p/uvudt
 	branch = master
+[submodule "uvkcp"]
+	path = uvkcp
+	url = https://github.com/InstantWebP2P/uvkcp
