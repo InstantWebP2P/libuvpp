@@ -22,5 +22,5 @@ jobs:
       - name: make
         run: cmake --build build
       - name: test
-        run: build/uv_run_tests
+        run: build\Debug\uv_run_tests
 
