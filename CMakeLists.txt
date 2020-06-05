@@ -85,7 +85,10 @@ set(uv_sources
     uvudt/udtstream.c
     uvkcp/kcp/ikcp.c
     uvkcp/uvkcp.c
-    uvkcp/kcpstream.c)
+    uvkcp/kcpstream.c
+    uvquic/quic++.cpp
+    uvquic/uvquic.c
+    uvquic/quicstream.c)
 
 if(WIN32)
   if (CMAKE_SYSTEM_VERSION VERSION_GREATER 10) # Windows 10
@@ -309,6 +312,7 @@ target_include_directories(uv
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvkcp>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvquic>
   PRIVATE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 target_link_libraries(uv ${uv_libraries})
@@ -322,6 +326,7 @@ target_include_directories(uv_a
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvkcp>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvquic>
   PRIVATE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 target_link_libraries(uv_a ${uv_libraries})
