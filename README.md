@@ -1,5 +1,6 @@
 ![libuv][libuv_banner]
 ![C/C++ CI](https://github.com/InstantWebP2P/libuvpp/workflows/C/C++%20CI/badge.svg)
+![build-windows](https://github.com/InstantWebP2P/libuvpp/workflows/build-windows/badge.svg)
 
 ## Overview
 
