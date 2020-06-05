@@ -5,3 +5,7 @@
 [submodule "uvkcp"]
 	path = uvkcp
 	url = https://github.com/InstantWebP2P/uvkcp
+[submodule "uvquic"]
+	path = uvquic
+	url = https://github.com/InstantWebP2P/uvquic
+	branch = master
