@@ -82,7 +82,10 @@ set(uv_sources
     uvudt/UDT4/src/udtc.cpp
     uvudt/UDT4/src/window.cpp
     uvudt/uvudt.c
-    uvudt/udtstream.c)
+    uvudt/udtstream.c
+    uvkcp/kcp/ikcp.c
+    uvkcp/uvkcp.c
+    uvkcp/kcpstream.c)
 
 if(WIN32)
   if (CMAKE_SYSTEM_VERSION VERSION_GREATER 10) # Windows 10
@@ -305,7 +308,7 @@ target_include_directories(uv
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt>
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt/UDT4/src>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvkcp>
   PRIVATE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 target_link_libraries(uv ${uv_libraries})
@@ -318,7 +321,7 @@ target_include_directories(uv_a
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt>
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvudt/UDT4/src>
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/uvkcp>
   PRIVATE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/src>)
 target_link_libraries(uv_a ${uv_libraries})
