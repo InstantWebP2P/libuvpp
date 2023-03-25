@@ -98,7 +98,7 @@ static void getaddrinfo_cb(uv_getaddrinfo_t* req,
                            int status,
                            struct addrinfo* res) {
   ASSERT(status == UV_EAI_CANCELED);
-  ASSERT(res == NULL);
+  ASSERT_NULL(res);
   uv_freeaddrinfo(res);  /* Should not crash. */
 }
 
@@ -108,8 +108,8 @@ static void getnameinfo_cb(uv_getnameinfo_t* handle,
                            const char* hostname,
                            const char* service) {
   ASSERT(status == UV_EAI_CANCELED);
-  ASSERT(hostname == NULL);
-  ASSERT(service == NULL);
+  ASSERT_NULL(hostname);
+  ASSERT_NULL(service);
 }
 
 
@@ -189,7 +189,7 @@ TEST_IMPL(threadpool_cancel_getaddrinfo) {
   ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
   ASSERT(1 == timer_cb_called);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }
 
@@ -225,7 +225,7 @@ TEST_IMPL(threadpool_cancel_getnameinfo) {
   ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
   ASSERT(1 == timer_cb_called);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }
 
@@ -248,7 +248,7 @@ TEST_IMPL(threadpool_cancel_random) {
   ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
   ASSERT(1 == done_cb_called);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }
 
@@ -272,7 +272,7 @@ TEST_IMPL(threadpool_cancel_work) {
   ASSERT(1 == timer_cb_called);
   ASSERT(ARRAY_SIZE(reqs) == done2_cb_called);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }
 
@@ -326,7 +326,7 @@ TEST_IMPL(threadpool_cancel_fs) {
   ASSERT(1 == timer_cb_called);
 
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }
 
@@ -344,6 +344,6 @@ TEST_IMPL(threadpool_cancel_single) {
   ASSERT(0 == uv_run(loop, UV_RUN_DEFAULT));
   ASSERT(1 == done_cb_called);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }

@@ -25,12 +25,17 @@
 #include <stdint.h>
 #include <errno.h>
 
+#include <dlfcn.h>
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #include <mach-o/dyld.h> /* _NSGetExecutablePath */
 #include <sys/resource.h>
 #include <sys/sysctl.h>
 #include <unistd.h>  /* sysconf */
+
+static uv_once_t once = UV_ONCE_INIT;
+static uint64_t (*time_func)(void);
+static mach_timebase_info_data_t timebase;
 
 
 int uv__platform_loop_init(uv_loop_t* loop) {
@@ -48,15 +53,19 @@ void uv__platform_loop_delete(uv_loop_t* loop) {
 }
 
 
-uint64_t uv__hrtime(uv_clocktype_t type) {
-  static mach_timebase_info_data_t info;
-
-  if ((ACCESS_ONCE(uint32_t, info.numer) == 0 ||
-       ACCESS_ONCE(uint32_t, info.denom) == 0) &&
-      mach_timebase_info(&info) != KERN_SUCCESS)
+static void uv__hrtime_init_once(void) {
+  if (KERN_SUCCESS != mach_timebase_info(&timebase))
     abort();
 
-  return mach_absolute_time() * info.numer / info.denom;
+  time_func = (uint64_t (*)(void)) dlsym(RTLD_DEFAULT, "mach_continuous_time");
+  if (time_func == NULL)
+    time_func = mach_absolute_time;
+}
+
+
+uint64_t uv__hrtime(uv_clocktype_t type) {
+  uv_once(&once, uv__hrtime_init_once);
+  return time_func() * timebase.numer / timebase.denom;
 }
 
 
@@ -98,7 +107,7 @@ uint64_t uv_get_free_memory(void) {
 
   if (host_statistics(mach_host_self(), HOST_VM_INFO,
                       (host_info_t)&info, &count) != KERN_SUCCESS) {
-    return UV_EINVAL;  /* FIXME(bnoordhuis) Translate error. */
+    return 0;
   }
 
   return (uint64_t) info.free_count * sysconf(_SC_PAGESIZE);
@@ -111,7 +120,7 @@ uint64_t uv_get_total_memory(void) {
   size_t size = sizeof(info);
 
   if (sysctl(which, ARRAY_SIZE(which), &info, &size, NULL, 0))
-    return UV__ERR(errno);
+    return 0;
 
   return (uint64_t) info;
 }
@@ -119,6 +128,11 @@ uint64_t uv_get_total_memory(void) {
 
 uint64_t uv_get_constrained_memory(void) {
   return 0;  /* Memory constraints are unknown. */
+}
+
+
+uint64_t uv_get_available_memory(void) {
+  return uv_get_free_memory();
 }
 
 
@@ -189,9 +203,13 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     return UV__ERR(errno);
   }
 
+  cpuspeed = 0;
   size = sizeof(cpuspeed);
-  if (sysctlbyname("hw.cpufrequency", &cpuspeed, &size, NULL, 0))
-    return UV__ERR(errno);
+  sysctlbyname("hw.cpufrequency", &cpuspeed, &size, NULL, 0);
+  if (cpuspeed == 0)
+    /* If sysctl hw.cputype == CPU_TYPE_ARM64, the correct value is unavailable
+     * from Apple, but we can hard-code it here to a plausible value. */
+    cpuspeed = 2400000000;
 
   if (host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &numcpus,
                           (processor_info_array_t*)&info,

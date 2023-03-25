@@ -79,7 +79,7 @@ static int test_async(int nthreads) {
   int i;
 
   threads = calloc(nthreads, sizeof(threads[0]));
-  ASSERT(threads != NULL);
+  ASSERT_NOT_NULL(threads);
 
   for (i = 0; i < nthreads; i++) {
     ctx = threads + i;
@@ -116,7 +116,7 @@ static int test_async(int nthreads) {
 
   free(threads);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
   return 0;
 }
 

@@ -20,7 +20,7 @@ Data types
 
     The base libuv handle type.
 
-.. c:type:: uv_handle_type
+.. c:enum:: uv_handle_type
 
     The kind of the libuv handle.
 
@@ -104,7 +104,7 @@ Public members
 API
 ---
 
-.. c:function:: UV_HANDLE_TYPE_MAP(iter_macro)
+.. c:macro:: UV_HANDLE_TYPE_MAP(iter_macro)
 
     Macro that expands to a series of invocations of `iter_macro` for
     each of the handle types. `iter_macro` is invoked with two
@@ -152,6 +152,9 @@ API
 
     In-progress requests, like uv_connect_t or uv_write_t, are cancelled and
     have their callbacks called asynchronously with status=UV_ECANCELED.
+
+    `close_cb` can be `NULL` in cases where no cleanup or deallocation is
+    necessary.
 
 .. c:function:: void uv_ref(uv_handle_t* handle)
 

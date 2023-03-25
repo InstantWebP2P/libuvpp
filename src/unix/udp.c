@@ -32,8 +32,6 @@
 #endif
 #include <sys/un.h>
 
-#define UV__UDP_DGRAM_MAXSIZE (64 * 1024)
-
 #if defined(IPV6_JOIN_GROUP) && !defined(IPV6_ADD_MEMBERSHIP)
 # define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP
 #endif
@@ -41,7 +39,6 @@
 #if defined(IPV6_LEAVE_GROUP) && !defined(IPV6_DROP_MEMBERSHIP)
 # define IPV6_DROP_MEMBERSHIP IPV6_LEAVE_GROUP
 #endif
-
 
 static void uv__udp_run_completed(uv_udp_t* handle);
 static void uv__udp_io(uv_loop_t* loop, uv__io_t* w, unsigned int revents);
@@ -51,36 +48,6 @@ static int uv__udp_maybe_deferred_bind(uv_udp_t* handle,
                                        int domain,
                                        unsigned int flags);
 
-#if HAVE_MMSG
-
-#define UV__MMSG_MAXWIDTH 20
-
-static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf);
-static void uv__udp_sendmmsg(uv_udp_t* handle);
-
-static int uv__recvmmsg_avail;
-static int uv__sendmmsg_avail;
-static uv_once_t once = UV_ONCE_INIT;
-
-static void uv__udp_mmsg_init(void) {
-  int ret;
-  int s;
-  s = uv__socket(AF_INET, SOCK_DGRAM, 0);
-  if (s < 0)
-    return;
-  ret = uv__sendmmsg(s, NULL, 0, 0);
-  if (ret == 0 || errno != ENOSYS) {
-    uv__sendmmsg_avail = 1;
-    uv__recvmmsg_avail = 1;
-  } else {
-    ret = uv__recvmmsg(s, NULL, 0, 0, NULL);
-    if (ret == 0 || errno != ENOSYS)
-      uv__recvmmsg_avail = 1;
-  }
-  uv__close(s);
-}
-
-#endif
 
 void uv__udp_close(uv_udp_t* handle) {
   uv__io_close(handle->loop, &handle->io_watcher);
@@ -180,11 +147,11 @@ static void uv__udp_io(uv_loop_t* loop, uv__io_t* w, unsigned int revents) {
   }
 }
 
-#if HAVE_MMSG
 static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf) {
-  struct sockaddr_in6 peers[UV__MMSG_MAXWIDTH];
-  struct iovec iov[UV__MMSG_MAXWIDTH];
-  struct uv__mmsghdr msgs[UV__MMSG_MAXWIDTH];
+#if defined(__linux__) || defined(__FreeBSD__)
+  struct sockaddr_in6 peers[20];
+  struct iovec iov[ARRAY_SIZE(peers)];
+  struct mmsghdr msgs[ARRAY_SIZE(peers)];
   ssize_t nread;
   uv_buf_t chunk_buf;
   size_t chunks;
@@ -198,14 +165,18 @@ static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf) {
   for (k = 0; k < chunks; ++k) {
     iov[k].iov_base = buf->base + k * UV__UDP_DGRAM_MAXSIZE;
     iov[k].iov_len = UV__UDP_DGRAM_MAXSIZE;
+    memset(&msgs[k].msg_hdr, 0, sizeof(msgs[k].msg_hdr));
     msgs[k].msg_hdr.msg_iov = iov + k;
     msgs[k].msg_hdr.msg_iovlen = 1;
     msgs[k].msg_hdr.msg_name = peers + k;
     msgs[k].msg_hdr.msg_namelen = sizeof(peers[0]);
+    msgs[k].msg_hdr.msg_control = NULL;
+    msgs[k].msg_hdr.msg_controllen = 0;
+    msgs[k].msg_hdr.msg_flags = 0;
   }
 
   do
-    nread = uv__recvmmsg(handle->io_watcher.fd, msgs, chunks, 0, NULL);
+    nread = recvmmsg(handle->io_watcher.fd, msgs, chunks, 0, NULL);
   while (nread == -1 && errno == EINTR);
 
   if (nread < 1) {
@@ -230,11 +201,13 @@ static int uv__udp_recvmmsg(uv_udp_t* handle, uv_buf_t* buf) {
 
     /* one last callback so the original buffer is freed */
     if (handle->recv_cb != NULL)
-      handle->recv_cb(handle, 0, buf, NULL, 0);
+      handle->recv_cb(handle, 0, buf, NULL, UV_UDP_MMSG_FREE);
   }
   return nread;
+#else  /* __linux__ || ____FreeBSD__ */
+  return UV_ENOSYS;
+#endif  /* __linux__ || ____FreeBSD__ */
 }
-#endif
 
 static void uv__udp_recvmsg(uv_udp_t* handle) {
   struct sockaddr_storage peer;
@@ -261,19 +234,12 @@ static void uv__udp_recvmsg(uv_udp_t* handle) {
     }
     assert(buf.base != NULL);
 
-#if HAVE_MMSG
-    uv_once(&once, uv__udp_mmsg_init);
-    if (uv__recvmmsg_avail) {
-      /* Returned space for more than 1 datagram, use it to receive
-       * multiple datagrams. */
-      if (buf.len >= 2 * UV__UDP_DGRAM_MAXSIZE) {
-        nread = uv__udp_recvmmsg(handle, &buf);
-        if (nread > 0)
-          count -= nread;
-        continue;
-      }
+    if (uv_udp_using_recvmmsg(handle)) {
+      nread = uv__udp_recvmmsg(handle, &buf);
+      if (nread > 0)
+        count -= nread;
+      continue;
     }
-#endif
 
     memset(&h, 0, sizeof(h));
     memset(&peer, 0, sizeof(peer));
@@ -309,11 +275,11 @@ static void uv__udp_recvmsg(uv_udp_t* handle) {
       && handle->recv_cb != NULL);
 }
 
-#if HAVE_MMSG
-static void uv__udp_sendmmsg(uv_udp_t* handle) {
+static void uv__udp_sendmsg(uv_udp_t* handle) {
+#if defined(__linux__) || defined(__FreeBSD__)
   uv_udp_send_t* req;
-  struct uv__mmsghdr h[UV__MMSG_MAXWIDTH];
-  struct uv__mmsghdr *p;
+  struct mmsghdr h[20];
+  struct mmsghdr* p;
   QUEUE* q;
   ssize_t npkts;
   size_t pkts;
@@ -324,7 +290,7 @@ static void uv__udp_sendmmsg(uv_udp_t* handle) {
 
 write_queue_drain:
   for (pkts = 0, q = QUEUE_HEAD(&handle->write_queue);
-       pkts < UV__MMSG_MAXWIDTH && q != &handle->write_queue;
+       pkts < ARRAY_SIZE(h) && q != &handle->write_queue;
        ++pkts, q = QUEUE_HEAD(q)) {
     assert(q != NULL);
     req = QUEUE_DATA(q, uv_udp_send_t, queue);
@@ -353,7 +319,7 @@ write_queue_drain:
   }
 
   do
-    npkts = uv__sendmmsg(handle->io_watcher.fd, h, pkts, 0);
+    npkts = sendmmsg(handle->io_watcher.fd, h, pkts, 0);
   while (npkts == -1 && errno == EINTR);
 
   if (npkts < 1) {
@@ -361,7 +327,7 @@ write_queue_drain:
       return;
     for (i = 0, q = QUEUE_HEAD(&handle->write_queue);
          i < pkts && q != &handle->write_queue;
-         ++i, q = QUEUE_HEAD(q)) {
+         ++i, q = QUEUE_HEAD(&handle->write_queue)) {
       assert(q != NULL);
       req = QUEUE_DATA(q, uv_udp_send_t, queue);
       assert(req != NULL);
@@ -374,8 +340,11 @@ write_queue_drain:
     return;
   }
 
+  /* Safety: npkts known to be >0 below. Hence cast from ssize_t
+   * to size_t safe.
+   */
   for (i = 0, q = QUEUE_HEAD(&handle->write_queue);
-       i < pkts && q != &handle->write_queue;
+       i < (size_t)npkts && q != &handle->write_queue;
        ++i, q = QUEUE_HEAD(&handle->write_queue)) {
     assert(q != NULL);
     req = QUEUE_DATA(q, uv_udp_send_t, queue);
@@ -396,23 +365,11 @@ write_queue_drain:
   if (!QUEUE_EMPTY(&handle->write_queue))
     goto write_queue_drain;
   uv__io_feed(handle->loop, &handle->io_watcher);
-  return;
-}
-#endif
-
-static void uv__udp_sendmsg(uv_udp_t* handle) {
+#else  /* __linux__ || ____FreeBSD__ */
   uv_udp_send_t* req;
   struct msghdr h;
   QUEUE* q;
   ssize_t size;
-
-#if HAVE_MMSG
-  uv_once(&once, uv__udp_mmsg_init);
-  if (uv__sendmmsg_avail) {
-    uv__udp_sendmmsg(handle);
-    return;
-  }
-#endif
 
   while (!QUEUE_EMPTY(&handle->write_queue)) {
     q = QUEUE_HEAD(&handle->write_queue);
@@ -461,6 +418,7 @@ static void uv__udp_sendmsg(uv_udp_t* handle) {
     QUEUE_INSERT_TAIL(&handle->write_completed_queue, &req->queue);
     uv__io_feed(handle->loop, &handle->io_watcher);
   }
+#endif  /* __linux__ || ____FreeBSD__ */
 }
 
 /* On the BSDs, SO_REUSEPORT implies SO_REUSEADDR but with some additional
@@ -490,7 +448,7 @@ static int uv__set_reuse(int fd) {
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)))
        return UV__ERR(errno);
   }
-#elif defined(SO_REUSEPORT) && !defined(__linux__)
+#elif defined(SO_REUSEPORT) && !defined(__linux__) && !defined(__GNU__)
   if (setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes)))
     return UV__ERR(errno);
 #else
@@ -498,6 +456,28 @@ static int uv__set_reuse(int fd) {
     return UV__ERR(errno);
 #endif
 
+  return 0;
+}
+
+/*
+ * The Linux kernel suppresses some ICMP error messages by default for UDP
+ * sockets. Setting IP_RECVERR/IPV6_RECVERR on the socket enables full ICMP
+ * error reporting, hopefully resulting in faster failover to working name
+ * servers.
+ */
+static int uv__set_recverr(int fd, sa_family_t ss_family) {
+#if defined(__linux__)
+  int yes;
+
+  yes = 1;
+  if (ss_family == AF_INET) {
+    if (setsockopt(fd, IPPROTO_IP, IP_RECVERR, &yes, sizeof(yes)))
+      return UV__ERR(errno);
+  } else if (ss_family == AF_INET6) {
+    if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVERR, &yes, sizeof(yes)))
+       return UV__ERR(errno);
+  }
+#endif
   return 0;
 }
 
@@ -511,7 +491,7 @@ int uv__udp_bind(uv_udp_t* handle,
   int fd;
 
   /* Check for bad flags. */
-  if (flags & ~(UV_UDP_IPV6ONLY | UV_UDP_REUSEADDR))
+  if (flags & ~(UV_UDP_IPV6ONLY | UV_UDP_REUSEADDR | UV_UDP_LINUX_RECVERR))
     return UV_EINVAL;
 
   /* Cannot set IPv6-only mode on non-IPv6 socket. */
@@ -525,6 +505,12 @@ int uv__udp_bind(uv_udp_t* handle,
       return err;
     fd = err;
     handle->io_watcher.fd = fd;
+  }
+
+  if (flags & UV_UDP_LINUX_RECVERR) {
+    err = uv__set_recverr(fd, addr->sa_family);
+    if (err)
+      return err;
   }
 
   if (flags & UV_UDP_REUSEADDR) {
@@ -566,11 +552,7 @@ int uv__udp_bind(uv_udp_t* handle,
 static int uv__udp_maybe_deferred_bind(uv_udp_t* handle,
                                        int domain,
                                        unsigned int flags) {
-  union {
-    struct sockaddr_in6 in6;
-    struct sockaddr_in in;
-    struct sockaddr addr;
-  } taddr;
+  union uv__sockaddr taddr;
   socklen_t addrlen;
 
   if (handle->io_watcher.fd != -1)
@@ -626,27 +608,79 @@ int uv__udp_connect(uv_udp_t* handle,
   return 0;
 }
 
-
+/* From https://pubs.opengroup.org/onlinepubs/9699919799/functions/connect.html
+ * Any of uv supported UNIXs kernel should be standardized, but the kernel
+ * implementation logic not same, let's use pseudocode to explain the udp
+ * disconnect behaviors:
+ *
+ * Predefined stubs for pseudocode:
+ *   1. sodisconnect: The function to perform the real udp disconnect
+ *   2. pru_connect: The function to perform the real udp connect
+ *   3. so: The kernel object match with socket fd
+ *   4. addr: The sockaddr parameter from user space
+ *
+ * BSDs:
+ *   if(sodisconnect(so) == 0) { // udp disconnect succeed
+ *     if (addr->sa_len != so->addr->sa_len) return EINVAL;
+ *     if (addr->sa_family != so->addr->sa_family) return EAFNOSUPPORT;
+ *     pru_connect(so);
+ *   }
+ *   else return EISCONN;
+ *
+ * z/OS (same with Windows):
+ *   if(addr->sa_len < so->addr->sa_len) return EINVAL;
+ *   if (addr->sa_family == AF_UNSPEC) sodisconnect(so);
+ *
+ * AIX:
+ *   if(addr->sa_len != sizeof(struct sockaddr)) return EINVAL; // ignore ip proto version
+ *   if (addr->sa_family == AF_UNSPEC) sodisconnect(so);
+ *
+ * Linux,Others:
+ *   if(addr->sa_len < sizeof(struct sockaddr)) return EINVAL;
+ *   if (addr->sa_family == AF_UNSPEC) sodisconnect(so);
+ */
 int uv__udp_disconnect(uv_udp_t* handle) {
     int r;
+#if defined(__MVS__)
+    struct sockaddr_storage addr;
+#else
     struct sockaddr addr;
+#endif
 
     memset(&addr, 0, sizeof(addr));
 
+#if defined(__MVS__)
+    addr.ss_family = AF_UNSPEC;
+#else
     addr.sa_family = AF_UNSPEC;
+#endif
 
     do {
       errno = 0;
-      r = connect(handle->io_watcher.fd, &addr, sizeof(addr));
+#ifdef __PASE__
+      /* On IBMi a connectionless transport socket can be disconnected by
+       * either setting the addr parameter to NULL or setting the
+       * addr_length parameter to zero, and issuing another connect().
+       * https://www.ibm.com/docs/en/i/7.4?topic=ssw_ibm_i_74/apis/connec.htm
+       */
+      r = connect(handle->io_watcher.fd, (struct sockaddr*) NULL, 0);
+#else
+      r = connect(handle->io_watcher.fd, (struct sockaddr*) &addr, sizeof(addr));
+#endif
     } while (r == -1 && errno == EINTR);
 
-    if (r == -1 && errno != EAFNOSUPPORT)
+    if (r == -1) {
+#if defined(BSD)  /* The macro BSD is from sys/param.h */
+      if (errno != EAFNOSUPPORT && errno != EINVAL)
+        return UV__ERR(errno);
+#else
       return UV__ERR(errno);
+#endif
+    }
 
     handle->flags &= ~UV_HANDLE_UDP_CONNECTED;
     return 0;
 }
-
 
 int uv__udp_send(uv_udp_send_t* req,
                  uv_udp_t* handle,
@@ -852,7 +886,12 @@ static int uv__udp_set_membership6(uv_udp_t* handle,
 }
 
 
-#if !defined(__OpenBSD__) && !defined(__NetBSD__) && !defined(__ANDROID__)
+#if !defined(__OpenBSD__) &&                                        \
+    !defined(__NetBSD__) &&                                         \
+    !defined(__ANDROID__) &&                                        \
+    !defined(__DragonFly__) &&                                      \
+    !defined(__QNX__) &&                                            \
+    !defined(__GNU__)
 static int uv__udp_set_source_membership4(uv_udp_t* handle,
                                           const struct sockaddr_in* multicast_addr,
                                           const char* interface_addr,
@@ -923,8 +962,10 @@ static int uv__udp_set_source_membership6(uv_udp_t* handle,
     mreq.gsr_interface = 0;
   }
 
-  memcpy(&mreq.gsr_group, multicast_addr, sizeof(mreq.gsr_group));
-  memcpy(&mreq.gsr_source, source_addr, sizeof(mreq.gsr_source));
+  STATIC_ASSERT(sizeof(mreq.gsr_group) >= sizeof(*multicast_addr));
+  STATIC_ASSERT(sizeof(mreq.gsr_source) >= sizeof(*source_addr));
+  memcpy(&mreq.gsr_group, multicast_addr, sizeof(*multicast_addr));
+  memcpy(&mreq.gsr_source, source_addr, sizeof(*source_addr));
 
   if (membership == UV_JOIN_GROUP)
     optname = MCAST_JOIN_SOURCE_GROUP;
@@ -946,26 +987,17 @@ static int uv__udp_set_source_membership6(uv_udp_t* handle,
 #endif
 
 
-int uv_udp_init_ex(uv_loop_t* loop, uv_udp_t* handle, unsigned int flags) {
-  int domain;
-  int err;
+int uv__udp_init_ex(uv_loop_t* loop,
+                    uv_udp_t* handle,
+                    unsigned flags,
+                    int domain) {
   int fd;
 
-  /* Use the lower 8 bits for the domain */
-  domain = flags & 0xFF;
-  if (domain != AF_INET && domain != AF_INET6 && domain != AF_UNSPEC)
-    return UV_EINVAL;
-
-  if (flags & ~0xFF)
-    return UV_EINVAL;
-
+  fd = -1;
   if (domain != AF_UNSPEC) {
-    err = uv__socket(domain, SOCK_DGRAM, 0);
-    if (err < 0)
-      return err;
-    fd = err;
-  } else {
-    fd = -1;
+    fd = uv__socket(domain, SOCK_DGRAM, 0);
+    if (fd < 0)
+      return fd;
   }
 
   uv__handle_init(loop, (uv_handle_t*)handle, UV_UDP);
@@ -981,8 +1013,12 @@ int uv_udp_init_ex(uv_loop_t* loop, uv_udp_t* handle, unsigned int flags) {
 }
 
 
-int uv_udp_init(uv_loop_t* loop, uv_udp_t* handle) {
-  return uv_udp_init_ex(loop, handle, AF_UNSPEC);
+int uv_udp_using_recvmmsg(const uv_udp_t* handle) {
+#if defined(__linux__) || defined(__FreeBSD__)
+  if (handle->flags & UV_HANDLE_UDP_RECVMMSG)
+    return 1;
+#endif
+  return 0;
 }
 
 
@@ -1041,42 +1077,38 @@ int uv_udp_set_source_membership(uv_udp_t* handle,
                                  const char* interface_addr,
                                  const char* source_addr,
                                  uv_membership membership) {
-#if !defined(__OpenBSD__) && !defined(__NetBSD__) && !defined(__ANDROID__)
+#if !defined(__OpenBSD__) &&                                        \
+    !defined(__NetBSD__) &&                                         \
+    !defined(__ANDROID__) &&                                        \
+    !defined(__DragonFly__) &&                                      \
+    !defined(__QNX__) &&                                            \
+    !defined(__GNU__)
   int err;
-  struct sockaddr_storage mcast_addr;
-  struct sockaddr_in* mcast_addr4;
-  struct sockaddr_in6* mcast_addr6;
-  struct sockaddr_storage src_addr;
-  struct sockaddr_in* src_addr4;
-  struct sockaddr_in6* src_addr6;
+  union uv__sockaddr mcast_addr;
+  union uv__sockaddr src_addr;
 
-  mcast_addr4 = (struct sockaddr_in*)&mcast_addr;
-  mcast_addr6 = (struct sockaddr_in6*)&mcast_addr;
-  src_addr4 = (struct sockaddr_in*)&src_addr;
-  src_addr6 = (struct sockaddr_in6*)&src_addr;
-
-  err = uv_ip4_addr(multicast_addr, 0, mcast_addr4);
+  err = uv_ip4_addr(multicast_addr, 0, &mcast_addr.in);
   if (err) {
-    err = uv_ip6_addr(multicast_addr, 0, mcast_addr6);
+    err = uv_ip6_addr(multicast_addr, 0, &mcast_addr.in6);
     if (err)
       return err;
-    err = uv_ip6_addr(source_addr, 0, src_addr6);
+    err = uv_ip6_addr(source_addr, 0, &src_addr.in6);
     if (err)
       return err;
     return uv__udp_set_source_membership6(handle,
-                                          mcast_addr6,
+                                          &mcast_addr.in6,
                                           interface_addr,
-                                          src_addr6,
+                                          &src_addr.in6,
                                           membership);
   }
 
-  err = uv_ip4_addr(source_addr, 0, src_addr4);
+  err = uv_ip4_addr(source_addr, 0, &src_addr.in);
   if (err)
     return err;
   return uv__udp_set_source_membership4(handle,
-                                        mcast_addr4,
+                                        &mcast_addr.in,
                                         interface_addr,
-                                        src_addr4,
+                                        &src_addr.in,
                                         membership);
 #else
   return UV_ENOSYS;
@@ -1157,7 +1189,7 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
  * and use the general uv__setsockopt_maybe_char call on other platforms.
  */
 #if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__)
+    defined(__MVS__) || defined(__QNX__)
 
   return uv__setsockopt(handle,
                         IP_TTL,
@@ -1166,7 +1198,7 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
                         sizeof(ttl));
 
 #else /* !(defined(__sun) || defined(_AIX) || defined (__OpenBSD__) ||
-           defined(__MVS__)) */
+           defined(__MVS__) || defined(__QNX__)) */
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_TTL,
@@ -1174,7 +1206,7 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
                                    ttl);
 
 #endif /* defined(__sun) || defined(_AIX) || defined (__OpenBSD__) ||
-          defined(__MVS__) */
+          defined(__MVS__) || defined(__QNX__) */
 }
 
 
@@ -1186,7 +1218,7 @@ int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl) {
  * and use the general uv__setsockopt_maybe_char call otherwise.
  */
 #if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__)
+    defined(__MVS__) || defined(__QNX__)
   if (handle->flags & UV_HANDLE_IPV6)
     return uv__setsockopt(handle,
                           IP_MULTICAST_TTL,
@@ -1194,7 +1226,7 @@ int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl) {
                           &ttl,
                           sizeof(ttl));
 #endif /* defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__) */
+    defined(__MVS__) || defined(__QNX__) */
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_MULTICAST_TTL,
@@ -1211,7 +1243,7 @@ int uv_udp_set_multicast_loop(uv_udp_t* handle, int on) {
  * and use the general uv__setsockopt_maybe_char call otherwise.
  */
 #if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || \
-    defined(__MVS__)
+    defined(__MVS__) || defined(__QNX__)
   if (handle->flags & UV_HANDLE_IPV6)
     return uv__setsockopt(handle,
                           IP_MULTICAST_LOOP,
@@ -1219,7 +1251,7 @@ int uv_udp_set_multicast_loop(uv_udp_t* handle, int on) {
                           &on,
                           sizeof(on));
 #endif /* defined(__sun) || defined(_AIX) ||defined(__OpenBSD__) ||
-    defined(__MVS__) */
+    defined(__MVS__) || defined(__QNX__) */
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_MULTICAST_LOOP,

@@ -147,7 +147,7 @@ static connection_context_t* create_connection_context(
   connection_context_t* context;
 
   context = (connection_context_t*) malloc(sizeof *context);
-  ASSERT(context != NULL);
+  ASSERT_NOT_NULL(context);
 
   context->sock = sock;
   context->is_server_connection = is_server_connection;
@@ -464,7 +464,7 @@ static server_context_t* create_server_context(
   server_context_t* context;
 
   context = (server_context_t*) malloc(sizeof *context);
-  ASSERT(context != NULL);
+  ASSERT_NOT_NULL(context);
 
   context->sock = sock;
   context->connections = 0;
@@ -589,13 +589,22 @@ static void start_poll_test(void) {
 #if !defined(__sun) && !defined(_AIX) && !defined(__MVS__)
   ASSERT(disconnects == NUM_CLIENTS * 2);
 #endif
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
 }
 
-
+ 
+/* Issuing a shutdown() on IBM i PASE with parameter SHUT_WR
+ * also sends a normal close sequence to the partner program.
+ * This leads to timing issues and ECONNRESET failures in the
+ * test 'poll_duplex' and 'poll_unidirectional'.
+ * 
+ * https://www.ibm.com/support/knowledgecenter/en/ssw_ibm_i_74/apis/shutdn.htm
+ */
 TEST_IMPL(poll_duplex) {
 #if defined(NO_SELF_CONNECT)
   RETURN_SKIP(NO_SELF_CONNECT);
+#elif defined(__PASE__)
+  RETURN_SKIP("API shutdown() may lead to timing issue on IBM i PASE");
 #endif
   test_mode = DUPLEX;
   start_poll_test();
@@ -606,6 +615,8 @@ TEST_IMPL(poll_duplex) {
 TEST_IMPL(poll_unidirectional) {
 #if defined(NO_SELF_CONNECT)
   RETURN_SKIP(NO_SELF_CONNECT);
+#elif defined(__PASE__)
+  RETURN_SKIP("API shutdown() may lead to timing issue on IBM i PASE");
 #endif
   test_mode = UNIDIRECTIONAL;
   start_poll_test();
@@ -620,7 +631,7 @@ TEST_IMPL(poll_unidirectional) {
  */
 TEST_IMPL(poll_bad_fdtype) {
 #if !defined(__DragonFly__) && !defined(__FreeBSD__) && !defined(__sun) && \
-    !defined(_AIX) && !defined(__MVS__) && !defined(__FreeBSD_kernel__) && \
+    !defined(_AIX) && !defined(__MVS__) && \
     !defined(__OpenBSD__) && !defined(__CYGWIN__) && !defined(__MSYS__) && \
     !defined(__NetBSD__)
   uv_poll_t poll_handle;
@@ -636,7 +647,7 @@ TEST_IMPL(poll_bad_fdtype) {
   ASSERT(0 == close(fd));
 #endif
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
   return 0;
 }
 
@@ -657,7 +668,7 @@ TEST_IMPL(poll_nested_epoll) {
   ASSERT(0 == uv_run(uv_default_loop(), UV_RUN_DEFAULT));
   ASSERT(0 == close(fd));
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
   return 0;
 }
 #endif  /* __linux__ */
@@ -679,7 +690,7 @@ TEST_IMPL(poll_nested_kqueue) {
   ASSERT(0 == uv_run(uv_default_loop(), UV_RUN_DEFAULT));
   ASSERT(0 == close(fd));
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(uv_default_loop());
   return 0;
 }
 #endif  /* UV_HAVE_KQUEUE */

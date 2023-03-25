@@ -86,7 +86,7 @@ BENCHMARK_IMPL(million_async) {
   timeout = 5000;
 
   container = malloc(sizeof(*container));
-  ASSERT(container != NULL);
+  ASSERT_NOT_NULL(container);
   container->async_events = 0;
   container->handles_seen = 0;
 
@@ -107,6 +107,6 @@ BENCHMARK_IMPL(million_async) {
           fmt(container->handles_seen));
   free(container);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }

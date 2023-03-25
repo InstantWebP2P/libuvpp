@@ -131,7 +131,10 @@ TEST_IMPL(env_vars) {
 
   ASSERT(found == 2);
 #ifdef _WIN32
-  ASSERT(found_win_special > 0);
+  ASSERT_GT(found_win_special, 0);
+#else
+  /* There's no rule saying a key can't start with '='. */
+  (void) &found_win_special;
 #endif
 
   uv_os_free_environ(envitems, envcount);
@@ -141,6 +144,30 @@ TEST_IMPL(env_vars) {
 
   r = uv_os_unsetenv(name2);
   ASSERT(r == 0);
+
+  for (i = 1; i <= 4; i++) {
+    size_t n;
+    char* p;
+
+    n = i * 32768;
+    size = n + 1;
+
+    p = malloc(size);
+    ASSERT_NOT_NULL(p);
+
+    memset(p, 'x', n);
+    p[n] = '\0';
+
+    ASSERT_EQ(0, uv_os_setenv(name, p));
+    ASSERT_EQ(0, uv_os_getenv(name, p, &size));
+    ASSERT_EQ(n, size);
+
+    for (n = 0; n < size; n++)
+      ASSERT_EQ('x', p[n]);
+
+    ASSERT_EQ(0, uv_os_unsetenv(name));
+    free(p);
+  }
 
   return 0;
 }

@@ -58,7 +58,7 @@ Data types
             uv_timespec_t st_birthtim;
         } uv_stat_t;
 
-.. c:type:: uv_fs_type
+.. c:enum:: uv_fs_type
 
     File system request type.
 
@@ -100,7 +100,8 @@ Data types
             UV_FS_OPENDIR,
             UV_FS_READDIR,
             UV_FS_CLOSEDIR,
-            UV_FS_MKSTEMP
+            UV_FS_MKSTEMP,
+            UV_FS_LUTIME
         } uv_fs_type;
 
 .. c:type:: uv_statfs_t
@@ -121,7 +122,7 @@ Data types
             uint64_t f_spare[4];
         } uv_statfs_t;
 
-.. c:type:: uv_dirent_t
+.. c:enum:: uv_dirent_t
 
     Cross platform (reduced) equivalent of ``struct dirent``.
     Used in :c:func:`uv_fs_scandir_next`.
@@ -158,6 +159,10 @@ Data types
             uv_dirent_t* dirents;
             size_t nentries;
         } uv_dir_t;
+
+.. c:type:: void (*uv_fs_cb)(uv_fs_t* req)
+
+    Callback called when a request is completed asynchronously.
 
 
 Public members
@@ -217,7 +222,8 @@ API
 
 .. c:function:: int uv_fs_read(uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, uv_fs_cb cb)
 
-    Equivalent to :man:`preadv(2)`.
+    Equivalent to :man:`preadv(2)`. If the `offset` argument is `-1`, then
+    the current file offset is used and updated.
 
     .. warning::
         On Windows, under non-MSVC environments (e.g. when GCC or Clang is used
@@ -230,7 +236,8 @@ API
 
 .. c:function:: int uv_fs_write(uv_loop_t* loop, uv_fs_t* req, uv_file file, const uv_buf_t bufs[], unsigned int nbufs, int64_t offset, uv_fs_cb cb)
 
-    Equivalent to :man:`pwritev(2)`.
+    Equivalent to :man:`pwritev(2)`. If the `offset` argument is `-1`, then
+    the current file offset is used and updated.
 
     .. warning::
         On Windows, under non-MSVC environments (e.g. when GCC or Clang is used
@@ -402,12 +409,17 @@ API
 
 .. c:function:: int uv_fs_utime(uv_loop_t* loop, uv_fs_t* req, const char* path, double atime, double mtime, uv_fs_cb cb)
 .. c:function:: int uv_fs_futime(uv_loop_t* loop, uv_fs_t* req, uv_file file, double atime, double mtime, uv_fs_cb cb)
+.. c:function:: int uv_fs_lutime(uv_loop_t* loop, uv_fs_t* req, const char* path, double atime, double mtime, uv_fs_cb cb)
 
-    Equivalent to :man:`utime(2)` and :man:`futimes(3)` respectively.
+    Equivalent to :man:`utime(2)`, :man:`futimes(3)` and :man:`lutimes(3)` respectively.
 
     .. note::
-      AIX: This function only works for AIX 7.1 and newer. It can still be called on older
-      versions but will return ``UV_ENOSYS``.
+      z/OS: `uv_fs_lutime()` is not implemented for z/OS. It can still be called but will return
+      ``UV_ENOSYS``.
+
+    .. note::
+      AIX: `uv_fs_futime()` and `uv_fs_lutime()` functions only work for AIX 7.1 and newer.
+      They can still be called on older versions but will return ``UV_ENOSYS``.
 
     .. versionchanged:: 1.10.0 sub-second precission is supported on Windows
 
@@ -457,10 +469,6 @@ API
         The background story and some more details on these issues can be checked
         `here <https://github.com/nodejs/node/issues/7726>`_.
 
-    .. note::
-      This function is not implemented on Windows XP and Windows Server 2003.
-      On these systems, UV_ENOSYS is returned.
-
     .. versionadded:: 1.8.0
 
 .. c:function:: int uv_fs_chown(uv_loop_t* loop, uv_fs_t* req, const char* path, uv_uid_t uid, uv_gid_t gid, uv_fs_cb cb)
@@ -485,6 +493,13 @@ API
     Returns `req->result`.
 
     .. versionadded:: 1.19.0
+
+.. c:function:: int uv_fs_get_system_error(const uv_fs_t* req)
+
+    Returns the platform specific error code - `GetLastError()` value on Windows
+    and `-(req->result)` on other platforms.
+
+    .. versionadded:: 1.38.0
 
 .. c:function:: void* uv_fs_get_ptr(const uv_fs_t* req)
 
@@ -522,8 +537,8 @@ Helper functions
 
    For a OS-dependent handle, get the file descriptor in the C runtime.
    On UNIX, returns the ``os_fd`` intact. On Windows, this calls `_open_osfhandle <https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/open-osfhandle?view=vs-2019>`_.
-   Note that the return value is still owned by the CRT,
-   any attempts to close it or to use it after closing the handle may lead to malfunction.
+   Note that this consumes the argument, any attempts to close it or to use it
+   after closing the return value may lead to malfunction.
 
     .. versionadded:: 1.23.0
 

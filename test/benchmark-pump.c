@@ -390,6 +390,7 @@ HELPER_IMPL(tcp_pump_server) {
   r = uv_listen((uv_stream_t*)&tcpServer, MAX_WRITE_HANDLES, connection_cb);
   ASSERT(r == 0);
 
+  notify_parent_process();
   uv_run(loop, UV_RUN_DEFAULT);
 
   return 0;
@@ -411,9 +412,10 @@ HELPER_IMPL(pipe_pump_server) {
   r = uv_listen((uv_stream_t*)&pipeServer, MAX_WRITE_HANDLES, connection_cb);
   ASSERT(r == 0);
 
+  notify_parent_process();
   uv_run(loop, UV_RUN_DEFAULT);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
   return 0;
 }
 
@@ -432,7 +434,7 @@ static void tcp_pump(int n) {
 
   uv_run(loop, UV_RUN_DEFAULT);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
 }
 
 
@@ -448,7 +450,7 @@ static void pipe_pump(int n) {
 
   uv_run(loop, UV_RUN_DEFAULT);
 
-  MAKE_VALGRIND_HAPPY();
+  MAKE_VALGRIND_HAPPY(loop);
 }
 
 

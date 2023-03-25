@@ -24,14 +24,15 @@
 
 #include "uv.h"
 #include "internal.h"
-#include "atomic-ops.h"
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdio.h>  /* snprintf() */
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sched.h>  /* sched_yield() */
 
 #ifdef __linux__
 #include <sys/eventfd.h>
@@ -39,6 +40,7 @@
 
 static void uv__async_send(uv_loop_t* loop);
 static int uv__async_start(uv_loop_t* loop);
+static void uv__cpu_relax(void);
 
 
 int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
@@ -51,6 +53,7 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
   uv__handle_init(loop, (uv_handle_t*)handle, UV_ASYNC);
   handle->async_cb = async_cb;
   handle->pending = 0;
+  handle->u.fd = 0; /* This will be used as a busy flag. */
 
   QUEUE_INSERT_TAIL(&loop->async_handles, &handle->queue);
   uv__handle_start(handle);
@@ -60,41 +63,61 @@ int uv_async_init(uv_loop_t* loop, uv_async_t* handle, uv_async_cb async_cb) {
 
 
 int uv_async_send(uv_async_t* handle) {
+  _Atomic int* pending;
+  _Atomic int* busy;
+
+  pending = (_Atomic int*) &handle->pending;
+  busy = (_Atomic int*) &handle->u.fd;
+
   /* Do a cheap read first. */
-  if (ACCESS_ONCE(int, handle->pending) != 0)
+  if (atomic_load_explicit(pending, memory_order_relaxed) != 0)
     return 0;
 
-  /* Tell the other thread we're busy with the handle. */
-  if (cmpxchgi(&handle->pending, 0, 1) != 0)
-    return 0;
+  /* Set the loop to busy. */
+  atomic_fetch_add(busy, 1);
 
   /* Wake up the other thread's event loop. */
-  uv__async_send(handle->loop);
+  if (atomic_exchange(pending, 1) == 0)
+    uv__async_send(handle->loop);
 
-  /* Tell the other thread we're done. */
-  if (cmpxchgi(&handle->pending, 1, 2) != 1)
-    abort();
+  /* Set the loop to not-busy. */
+  atomic_fetch_add(busy, -1);
 
   return 0;
 }
 
 
-/* Only call this from the event loop thread. */
-static int uv__async_spin(uv_async_t* handle) {
-  int rc;
+/* Wait for the busy flag to clear before closing.
+ * Only call this from the event loop thread. */
+static void uv__async_spin(uv_async_t* handle) {
+  _Atomic int* pending;
+  _Atomic int* busy;
+  int i;
+
+  pending = (_Atomic int*) &handle->pending;
+  busy = (_Atomic int*) &handle->u.fd;
+
+  /* Set the pending flag first, so no new events will be added by other
+   * threads after this function returns. */
+  atomic_store(pending, 1);
 
   for (;;) {
-    /* rc=0 -- handle is not pending.
-     * rc=1 -- handle is pending, other thread is still working with it.
-     * rc=2 -- handle is pending, other thread is done.
+    /* 997 is not completely chosen at random. It's a prime number, acyclic by
+     * nature, and should therefore hopefully dampen sympathetic resonance.
      */
-    rc = cmpxchgi(&handle->pending, 2, 0);
+    for (i = 0; i < 997; i++) {
+      if (atomic_load(busy) == 0)
+        return;
 
-    if (rc != 1)
-      return rc;
+      /* Other thread is busy with this handle, spin until it's done. */
+      uv__cpu_relax();
+    }
 
-    /* Other thread is busy with this handle, spin until it's done. */
-    cpu_relax();
+    /* Yield the CPU. We may have preempted the other thread while it's
+     * inside the critical section and if it's running on the same CPU
+     * as us, we'll just burn CPU cycles until the end of our time slice.
+     */
+    sched_yield();
   }
 }
 
@@ -112,6 +135,7 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   QUEUE queue;
   QUEUE* q;
   uv_async_t* h;
+  _Atomic int *pending;
 
   assert(w == &loop->async_io_watcher);
 
@@ -141,8 +165,10 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     QUEUE_REMOVE(q);
     QUEUE_INSERT_TAIL(&loop->async_handles, q);
 
-    if (0 == uv__async_spin(h))
-      continue;  /* Not pending. */
+    /* Atomically fetch and clear pending flag */
+    pending = (_Atomic int*) &h->pending;
+    if (atomic_exchange(pending, 0) == 0)
+      continue;
 
     if (h->async_cb == NULL)
       continue;
@@ -201,7 +227,7 @@ static int uv__async_start(uv_loop_t* loop) {
   pipefd[0] = err;
   pipefd[1] = -1;
 #else
-  err = uv__make_pipe(pipefd, UV__F_NONBLOCK);
+  err = uv__make_pipe(pipefd, UV_NONBLOCK_PIPE);
   if (err < 0)
     return err;
 #endif
@@ -214,19 +240,27 @@ static int uv__async_start(uv_loop_t* loop) {
 }
 
 
-int uv__async_fork(uv_loop_t* loop) {
-  if (loop->async_io_watcher.fd == -1) /* never started */
-    return 0;
-
-  uv__async_stop(loop);
-
-  return uv__async_start(loop);
-}
-
-
 void uv__async_stop(uv_loop_t* loop) {
+  QUEUE queue;
+  QUEUE* q;
+  uv_async_t* h;
+
   if (loop->async_io_watcher.fd == -1)
     return;
+
+  /* Make sure no other thread is accessing the async handle fd after the loop
+   * cleanup.
+   */
+  QUEUE_MOVE(&loop->async_handles, &queue);
+  while (!QUEUE_EMPTY(&queue)) {
+    q = QUEUE_HEAD(&queue);
+    h = QUEUE_DATA(q, uv_async_t, queue);
+
+    QUEUE_REMOVE(q);
+    QUEUE_INSERT_TAIL(&loop->async_handles, q);
+
+    uv__async_spin(h);
+  }
 
   if (loop->async_wfd != -1) {
     if (loop->async_wfd != loop->async_io_watcher.fd)
@@ -237,4 +271,59 @@ void uv__async_stop(uv_loop_t* loop) {
   uv__io_stop(loop, &loop->async_io_watcher, POLLIN);
   uv__close(loop->async_io_watcher.fd);
   loop->async_io_watcher.fd = -1;
+}
+
+
+int uv__async_fork(uv_loop_t* loop) {
+  QUEUE queue;
+  QUEUE* q;
+  uv_async_t* h;
+
+  if (loop->async_io_watcher.fd == -1) /* never started */
+    return 0;
+
+  QUEUE_MOVE(&loop->async_handles, &queue);
+  while (!QUEUE_EMPTY(&queue)) {
+    q = QUEUE_HEAD(&queue);
+    h = QUEUE_DATA(q, uv_async_t, queue);
+
+    QUEUE_REMOVE(q);
+    QUEUE_INSERT_TAIL(&loop->async_handles, q);
+
+    /* The state of any thread that set pending is now likely corrupt in this
+     * child because the user called fork, so just clear these flags and move
+     * on. Calling most libc functions after `fork` is declared to be undefined
+     * behavior anyways, unless async-signal-safe, for multithreaded programs
+     * like libuv, and nothing interesting in pthreads is async-signal-safe.
+     */
+    h->pending = 0;
+    /* This is the busy flag, and we just abruptly lost all other threads. */
+    h->u.fd = 0;
+  }
+
+  /* Recreate these, since they still exist, but belong to the wrong pid now. */
+  if (loop->async_wfd != -1) {
+    if (loop->async_wfd != loop->async_io_watcher.fd)
+      uv__close(loop->async_wfd);
+    loop->async_wfd = -1;
+  }
+
+  uv__io_stop(loop, &loop->async_io_watcher, POLLIN);
+  uv__close(loop->async_io_watcher.fd);
+  loop->async_io_watcher.fd = -1;
+
+  return uv__async_start(loop);
+}
+
+
+static void uv__cpu_relax(void) {
+#if defined(__i386__) || defined(__x86_64__)
+  __asm__ __volatile__ ("rep; nop" ::: "memory");  /* a.k.a. PAUSE */
+#elif (defined(__arm__) && __ARM_ARCH >= 7) || defined(__aarch64__)
+  __asm__ __volatile__ ("yield" ::: "memory");
+#elif (defined(__ppc__) || defined(__ppc64__)) && defined(__APPLE__)
+  __asm volatile ("" : : : "memory");
+#elif !defined(__APPLE__) && (defined(__powerpc64__) || defined(__ppc64__) || defined(__PPC64__))
+  __asm__ __volatile__ ("or 1,1,1; or 2,2,2" ::: "memory");
+#endif
 }
