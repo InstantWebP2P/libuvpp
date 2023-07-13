@@ -26,6 +26,8 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(LIBUV_BUILD_SHARED "Build shared lib" ON)
 
 cmake_dependent_option(LIBUV_BUILD_TESTS
@@ -207,7 +209,10 @@ if(WIN32)
        advapi32
        iphlpapi
        userenv
-       ws2_32)
+       ws2_32
+       dbghelp
+       ole32
+       uuid)
   list(APPEND uv_sources
        src/win/async.c
        src/win/core.c
@@ -619,7 +624,6 @@ if(LIBUV_BUILD_TESTS)
        test/test-pipe-server-close.c
        test/test-pipe-set-fchmod.c
        test/test-pipe-set-non-blocking.c
-       test/test-pipe-try-write.c
        test/test-platform-output.c
        test/test-poll-close-doesnt-corrupt-stack.c
        test/test-poll-close.c

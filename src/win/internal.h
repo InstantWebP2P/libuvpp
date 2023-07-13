@@ -134,8 +134,6 @@ int uv__pipe_write(uv_loop_t* loop,
                    uv_stream_t* send_handle,
                    uv_write_cb cb);
 void uv__pipe_shutdown(uv_loop_t* loop, uv_pipe_t* handle, uv_shutdown_t* req);
-int uv__pipe_try_write(uv_pipe_t* handle, const uv_buf_t bufs[],
-    unsigned int nbufs);
 
 void uv__process_pipe_read_req(uv_loop_t* loop, uv_pipe_t* handle,
     uv_req_t* req);
@@ -170,18 +168,8 @@ void uv__process_tty_read_req(uv_loop_t* loop, uv_tty_t* handle,
     uv_req_t* req);
 void uv__process_tty_write_req(uv_loop_t* loop, uv_tty_t* handle,
     uv_write_t* req);
-/*
- * uv__process_tty_accept_req() is a stub to keep DELEGATE_STREAM_REQ working
- * TODO: find a way to remove it
- */
-void uv__process_tty_accept_req(uv_loop_t* loop, uv_tty_t* handle,
-    uv_req_t* raw_req);
-/*
- * uv__process_tty_connect_req() is a stub to keep DELEGATE_STREAM_REQ working
- * TODO: find a way to remove it
- */
-void uv__process_tty_connect_req(uv_loop_t* loop, uv_tty_t* handle,
-    uv_connect_t* req);
+#define uv__process_tty_accept_req(loop, handle, req) abort()
+#define uv__process_tty_connect_req(loop, handle, req) abort()
 void uv__process_tty_shutdown_req(uv_loop_t* loop,
                                   uv_tty_t* stream,
                                   uv_shutdown_t* req);
