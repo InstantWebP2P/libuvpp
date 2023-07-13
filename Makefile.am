@@ -79,7 +79,7 @@ uvinclude_HEADERS += include/uv/win.h include/uv/tree.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/win \
                -DWIN32_LEAN_AND_MEAN \
                -DWIN32=1 \
-               -DUDT_EXPORTS
+               -DUDT_EXPORTS \
                -D_WIN32_WINNT=0x0602
 libuv_la_SOURCES += src/win/async.c \
                     src/win/atomicops-inl.h \
