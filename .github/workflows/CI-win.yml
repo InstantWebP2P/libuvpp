@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v2
         with:
           submodules: 'true'
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
       - name: Envinfo
         run: npx envinfo
       - name: Build
@@ -76,6 +78,8 @@ jobs:
           - {arch: x86_64, server: 2022, libgcc: seh }
     steps:
       - uses: actions/checkout@v3
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
       - name: Install mingw32 environment
         run: |
           sudo apt update
