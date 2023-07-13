@@ -28,6 +28,8 @@ jobs:
           - {toolchain: Visual Studio 17 2022, arch: x64, server: 2022, config: ASAN}
     steps:
       - uses: actions/checkout@v2
+        with:
+          submodules: 'true'
       - name: Envinfo
         run: npx envinfo
       - name: Build
