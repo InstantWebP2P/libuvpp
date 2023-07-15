@@ -75,6 +75,7 @@ libuv_la_SOURCES = src/fs-poll.c \
                    uvudt/UDT4/src/queue.h \
                    uvudt/UDT4/src/udtc.cpp \
                    uvudt/UDT4/src/udtc.h \
+                   uvudt/UDT4/src/udt.h \
                    uvudt/UDT4/src/window.cpp \
                    uvudt/UDT4/src/window.h \
                    uvudt/uvudt.c \
