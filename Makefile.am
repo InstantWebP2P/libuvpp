@@ -17,7 +17,7 @@ ACLOCAL_AMFLAGS = -I m4
 AM_CPPFLAGS = -I$(top_srcdir)/include \
               -I$(top_srcdir)/src \
               -I$(top_srcdir)/uudt \
-              -I$(top_srcdir)/uvudt/UDT4/src
+              -I$(top_srcdir)/uvudt/UDT4/src 
 
 include_HEADERS=include/uv.h uvudt/uvudt.h
 
@@ -49,20 +49,36 @@ libuv_la_SOURCES = src/fs-poll.c \
                    src/version.c \
                    \
                    uvudt/UDT4/src/api.cpp \
+                   uvudt/UDT4/src/api.h \
                    uvudt/UDT4/src/buffer.cpp \
+                   uvudt/UDT4/src/buffer.h \
                    uvudt/UDT4/src/cache.cpp \
+                   uvudt/UDT4/src/cache.h \
                    uvudt/UDT4/src/ccc.cpp \
+                   uvudt/UDT4/src/ccc.h \
+                   uvudt/UDT4/src/cc_cwrapper.h \
                    uvudt/UDT4/src/channel.cpp \
+                   uvudt/UDT4/src/channel.h \
                    uvudt/UDT4/src/common.cpp \
+                   uvudt/UDT4/src/common.h \
                    uvudt/UDT4/src/udt_core.cpp \
+                   uvudt/UDT4/src/core.h \
                    uvudt/UDT4/src/epoll.cpp \
+                   uvudt/UDT4/src/epoll.h \
                    uvudt/UDT4/src/list.cpp \
+                   uvudt/UDT4/src/list.h \
                    uvudt/UDT4/src/md5.cpp \
+                   uvudt/UDT4/src/md5.h \
                    uvudt/UDT4/src/packet.cpp \
+                   uvudt/UDT4/src/packet.h \
                    uvudt/UDT4/src/queue.cpp \
+                   uvudt/UDT4/src/queue.h \
                    uvudt/UDT4/src/udtc.cpp \
+                   uvudt/UDT4/src/udtc.h \
                    uvudt/UDT4/src/window.cpp \
+                   uvudt/UDT4/src/window.h \
                    uvudt/uvudt.c \
+                   uvudt/uvudt.h \
                    uvudt/udtstream.c \
                    src/strtok.c \
                    src/strtok.h
