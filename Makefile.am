@@ -81,6 +81,7 @@ libuv_la_SOURCES = src/fs-poll.c \
                    uvudt/uvudt.c \
                    uvudt/uvudt.h \
                    uvudt/udtstream.c \
+                   uvudt/queue.h \
                    src/strtok.c \
                    src/strtok.h
 
