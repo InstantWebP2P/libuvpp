@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.5)
 
 if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW) # Enable MSVC_RUNTIME_LIBRARY setting
@@ -764,6 +764,24 @@ add_executable(echo-client-udt uvudt/test/echo-client-udt.c)
 target_compile_definitions(echo-client-udt PRIVATE ${uv_defines} USING_UV_SHARED=1)
 target_compile_options(echo-client-udt PRIVATE ${uv_cflags})
 target_link_libraries(echo-client-udt uv)
+
+### echo-server-kcp
+add_executable(echo-server-kcp uvkcp/test/echo-server-kcp.c)
+target_compile_definitions(echo-server-kcp PRIVATE ${uv_defines} USING_UV_SHARED=1)
+target_compile_options(echo-server-kcp PRIVATE ${uv_cflags})
+target_link_libraries(echo-server-kcp uv)
+
+### echo-client-kcp
+add_executable(echo-client-kcp uvkcp/test/echo-client-kcp.c)
+target_compile_definitions(echo-client-kcp PRIVATE ${uv_defines} USING_UV_SHARED=1)
+target_compile_options(echo-client-kcp PRIVATE ${uv_cflags})
+target_link_libraries(echo-client-kcp uv)
+
+### test-kcp-simple
+add_executable(test-kcp-simple test-kcp-simple.c)
+target_compile_definitions(test-kcp-simple PRIVATE ${uv_defines} USING_UV_SHARED=1)
+target_compile_options(test-kcp-simple PRIVATE ${uv_cflags})
+target_link_libraries(test-kcp-simple uv)
 #################################################################### 
  
 # Now for some gibbering horrors from beyond the stars...
