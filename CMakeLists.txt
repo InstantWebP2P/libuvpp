@@ -777,6 +777,12 @@ target_compile_definitions(echo-client-kcp PRIVATE ${uv_defines} USING_UV_SHARED
 target_compile_options(echo-client-kcp PRIVATE ${uv_cflags})
 target_link_libraries(echo-client-kcp uv)
 
+### test-server-client
+add_executable(test-server-client uvkcp/test/test-server-client.c)
+target_compile_definitions(test-server-client PRIVATE ${uv_defines} USING_UV_SHARED=1)
+target_compile_options(test-server-client PRIVATE ${uv_cflags})
+target_link_libraries(test-server-client uv)
+
 ### test-kcp-simple
 add_executable(test-kcp-simple test-kcp-simple.c)
 target_compile_definitions(test-kcp-simple PRIVATE ${uv_defines} USING_UV_SHARED=1)

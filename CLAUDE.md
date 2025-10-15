@@ -55,10 +55,16 @@ build/echo-server-udt &
 build/echo-client-udt
 ```
 
-Run KCP protocol tests (must be built manually):
+Run KCP protocol tests:
 ```bash
 build/echo-server-kcp &
 build/echo-client-kcp
+```
+
+Run additional KCP test executables:
+```bash
+build/test-kcp-simple
+build/test-server-client
 ```
 
 For timing-sensitive tests on slow machines:
@@ -188,7 +194,7 @@ Use fork-aware debugging tools:
 
 ### Protocol Extension Status
 - **UDT**: Fully integrated with UDT4 library and test executables (`echo-server-udt`, `echo-client-udt`)
-- **KCP**: Integrated with KCP library, source files exist but test executables not built by default
+- **KCP**: Fully integrated with KCP library and test executables (`echo-server-kcp`, `echo-client-kcp`, `test-kcp-simple`, `test-server-client`)
 - **QUIC**: Basic structure in place but implementation files are currently empty
 
 ### Build Integration
@@ -199,7 +205,7 @@ Use fork-aware debugging tools:
 
 ### Testing Protocol Extensions
 - UDT has dedicated test executables: `echo-server-udt` and `echo-client-udt`
-- KCP test executables (`echo-server-kcp`, `echo-client-kcp`) exist in source but are not built by default
+- KCP has dedicated test executables: `echo-server-kcp`, `echo-client-kcp`, `test-kcp-simple`, and `test-server-client`
 - Protocol tests follow the same pattern as core libuv tests
 
 ### Build Verification
@@ -210,4 +216,16 @@ nm build/libuv.a | grep -i udt
 nm build/libuv.a | grep -i kcp
 ```
 
-**Note**: KCP test executables exist in source but are not built by default. To build them, ensure they are included in CMakeLists.txt.
+**Note**: KCP test executables are now built by default in CMakeLists.txt (lines 768-791). Recent commits have added support for building KCP test executables.
+
+## Current Development State
+
+### Recent Changes
+- **KCP Integration**: Recent commits (7beff81f) have fully integrated KCP protocol with test executables
+- **Build System**: CMakeLists.txt updated to include KCP test executables by default
+- **Submodules**: uvkcp and uvudt submodules have recent updates with compilation fixes
+
+### Active Development Branch
+- Current branch: `v1.x-udt`
+- Branch is ahead of origin by 2 commits
+- Protocol extensions are actively being developed and tested
