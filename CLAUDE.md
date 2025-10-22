@@ -39,7 +39,7 @@ Run all tests:
 (cd build && ctest -C Debug --output-on-failure)
 ```
 
-Run specific test:
+Run specific core libuv test:
 ```bash
 build/uv_run_tests_a TEST_NAME
 ```
@@ -227,5 +227,5 @@ nm build/libuv.a | grep -i kcp
 
 ### Active Development Branch
 - Current branch: `v1.x-udt`
-- Branch is ahead of origin by 2 commits
+- Branch is ahead of origin by 5 commits
 - Protocol extensions are actively being developed and tested

@@ -14,11 +14,19 @@ was primarily developed for use by [Node.js][], but it's also
 used by [Luvit](http://luvit.io/), [Julia](http://julialang.org/),
 [uvloop](https://github.com/MagicStack/uvloop), and [others](https://github.com/libuv/libuv/blob/v1.x/LINKS.md).
 
+**libuvpp** is a fork of libuv with minimal changes for P2P networking, extending the original libuv with additional transport protocols:
+
+- **UDT (UDP-based Data Transfer)** - High-performance data transfer protocol
+- **KCP (A Fast and Reliable ARQ Protocol)** - Fast and reliable UDP-based transport with adaptive timers and performance monitoring
+- **QUIC** - Modern transport protocol over UDP (planned)
+
+This is part of a dual-component project with **nodejs-httpp** that enables HTTP over UDP-based transports.
+
 ## Feature highlights
 
  * Full-featured event loop backed by epoll, kqueue, IOCP, event ports.
 
- * Asynchronous TCP, UDT and UDP sockets
+ * Asynchronous TCP, UDT, KCP and UDP sockets
 
  * Asynchronous DNS resolution
 
@@ -39,6 +47,14 @@ used by [Luvit](http://luvit.io/), [Julia](http://julialang.org/),
  * High resolution clock
 
  * Threading and synchronization primitives
+
+### P2P Networking Extensions
+
+ * **UDT Transport**: High-performance UDP-based data transfer with congestion control
+ * **KCP Transport**: Fast and reliable ARQ protocol with adaptive timers and performance monitoring
+ * **Hybrid TCP/UDP Handshake**: TCP for reliable connection establishment, UDP for high-performance data transfer
+ * **Performance Monitoring**: Comprehensive network performance statistics and callbacks
+ * **High-Performance Mode**: Aggressive optimization settings for low-latency scenarios
 
 ## Versioning
 
@@ -299,6 +315,82 @@ $ valgrind --trace-children=yes -v --tool=memcheck --leak-check=full --track-ori
 See the section on running tests.
 The benchmark driver is `./uv_run_benchmarks_a` and the benchmarks are
 listed in `test/benchmark-list.h`.
+
+### Building with Protocol Extensions
+
+Protocol extensions are automatically included in the main libuv library build. Each extension adds:
+
+- Source files to the main library
+- Include directories for protocol headers
+- Test executables for protocol validation
+
+#### Protocol Test Executables
+
+**UDT Tests:**
+```bash
+build/echo-server-udt &
+build/echo-client-udt
+```
+
+**KCP Tests:**
+```bash
+build/echo-server-kcp &
+build/echo-client-kcp
+build/test-kcp-simple
+build/test-server-client
+```
+
+#### Build Verification
+
+After building, verify protocol extensions are included:
+```bash
+nm build/libuv.a | grep -i udt
+nm build/libuv.a | grep -i kcp
+```
+
+#### Submodule Initialization
+
+Protocol extensions are git submodules. Initialize them before building:
+```bash
+git submodule update --init --recursive
+```
+
+## KCP Protocol Features
+
+uvkcp provides a high-performance KCP transport implementation with the following advanced features:
+
+### Adaptive Timer System
+- Uses `ikcp_check()` to determine optimal update intervals
+- Dynamically adjusts timer delays based on network conditions
+- Minimum 1ms and maximum 50ms intervals for responsive performance
+- High-performance mode with even tighter bounds (10ms max)
+
+### Performance Monitoring
+- Comprehensive network performance statistics via `uvkcp_netperf_t`
+- Configurable performance callbacks with periodic updates
+- Real-time metrics including bandwidth, RTT, packet loss, and window sizes
+- KCP-specific statistics from the underlying ikcp structure
+
+### High-Performance Mode
+- Aggressive KCP nodelay settings: `(1, 1, 1, 1)`
+- Larger window sizes: 1024 packets
+- Faster timer intervals: maximum 10ms delay
+- Optimized for low-latency, high-throughput scenarios
+
+### Hybrid Handshake Protocol
+1. **TCP Connection**: Client establishes TCP connection to server
+2. **Handshake Exchange**: Client sends KCP handshake request, server responds with assigned conversation ID
+3. **UDP Socket Creation**: Both sides create UDP sockets for data transfer
+4. **KCP Session**: KCP protocol session starts using the assigned conversation ID
+
+### API Features
+- Full libuv stream compatibility
+- IPv4 and IPv6 support
+- Non-blocking I/O operations
+- Comprehensive error handling
+- Debug logging capabilities
+
+For detailed API documentation and usage examples, see the [uvkcp/README.md](uvkcp/README.md).
 
 ## Supported Platforms
 
