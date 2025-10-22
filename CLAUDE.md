@@ -59,10 +59,6 @@ Run KCP protocol tests:
 ```bash
 build/echo-server-kcp &
 build/echo-client-kcp
-```
-
-Run additional KCP test executables:
-```bash
 build/test-kcp-simple
 build/test-server-client
 ```
@@ -229,3 +225,34 @@ nm build/libuv.a | grep -i kcp
 - Current branch: `v1.x-udt`
 - Branch is ahead of origin by 5 commits
 - Protocol extensions are actively being developed and tested
+
+## Key Implementation Details
+
+### KCP Protocol Features
+- **Adaptive Timer System**: Uses `ikcp_check()` for optimal update intervals
+- **Performance Monitoring**: Comprehensive network statistics via `uvkcp_netperf_t`
+- **High-Performance Mode**: Aggressive KCP nodelay settings and larger window sizes
+- **Hybrid Handshake Protocol**: TCP for connection establishment, UDP for data transfer
+
+### UDT Protocol Features
+- **UDT4 Library Integration**: Full UDT v4 implementation compiled from source
+- **Socket API Compatibility**: UDT sockets integrated with libuv event loop
+- **Performance Monitoring**: UDT-specific performance statistics
+
+### Build System Integration
+- Protocol sources are compiled directly into main libuv library (no separate libraries)
+- All protocol headers are included in build directories
+- Test executables are built alongside core libuv tests
+
+## Troubleshooting
+
+### Common Issues
+- **Submodule initialization**: Always run `git submodule update --init --recursive` before building
+- **Build failures**: Check that protocol submodules are properly initialized and up to date
+- **Test timeouts**: Use `UV_TEST_TIMEOUT_MULTIPLIER=2` for slow machines
+- **Protocol verification**: Use `nm` command to verify protocol symbols are in the library
+
+### Debugging Protocol Extensions
+- Use `DYLD_PRINT_LIBRARIES=1` on macOS to debug library loading
+- Check protocol-specific test executables for protocol-specific issues
+- Verify UDP sockets are non-blocking for proper libuv integration
